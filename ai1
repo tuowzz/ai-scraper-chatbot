@@ -102,3 +102,6 @@ def webhook():
 
 if __name__ == "__main__":
     app.run(port=5000)
+git add .
+git commit -m "Fix Render deploy issue"
+git push origin main
