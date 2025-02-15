@@ -1,21 +1,46 @@
-import os
-import json
 import requests
+import openai
 from flask import Flask, request, jsonify
+from bs4 import BeautifulSoup
+import json
+import os
 
 app = Flask(__name__)
 
-# ดึง Shopee Affiliate ID จาก Environment Variables
+# ตั้งค่า API Key จาก Environment Variables
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 SHOPEE_AFFILIATE_ID = os.getenv("SHOPEE_AFFILIATE_ID", "9A9ZBqQZk5")
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "")
 LINE_REPLY_URL = "https://api.line.me/v2/bot/message/reply"
 
-def generate_affiliate_link(product_url):
-    """ ฟังก์ชันสร้าง Shopee Affiliate Link """
-    return f"https://shope.ee/{SHOPEE_AFFILIATE_ID}?af_click_lookback=7d&af_reengagement_window=30d"
+if not OPENAI_API_KEY:
+    print("⚠️ OPENAI_API_KEY is missing. Please set it in environment variables.")
+    sys.exit(1)
+if not LINE_CHANNEL_ACCESS_TOKEN:
+    print("⚠️ LINE_CHANNEL_ACCESS_TOKEN is missing. Please set it in environment variables.")
+    sys.exit(1)
 
+# ฟังก์ชันใช้ OpenAI วิเคราะห์คำค้นหา
+def analyze_query(user_message):
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "คุณเป็น AI ที่ช่วยค้นหาสินค้าโดยแยกคำสำคัญ"},
+                {"role": "user", "content": user_message}
+            ],
+            api_key=OPENAI_API_KEY
+        )
+        return response["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        return "⚠️ ไม่สามารถวิเคราะห์คำค้นหาได้"
+
+# ฟังก์ชันสร้างลิงก์สินค้า Shopee อัตโนมัติ
+def generate_shopee_link(keyword):
+    return f"https://shope.ee/{SHOPEE_AFFILIATE_ID}?keyword={keyword.replace(' ', '+')}"
+
+# ฟังก์ชันส่งข้อความกลับไปยัง LINE
 def reply_to_line(reply_token, message):
-    """ ฟังก์ชันส่งข้อความกลับไปยัง LINE """
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}"
@@ -24,8 +49,10 @@ def reply_to_line(reply_token, message):
         "replyToken": reply_token,
         "messages": [{"type": "text", "text": message}]
     }
-    requests.post(LINE_REPLY_URL, headers=headers, data=json.dumps(payload))
+    response = requests.post(LINE_REPLY_URL, headers=headers, data=json.dumps(payload))
+    return response.status_code
 
+# LINE Webhook
 @app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.json
@@ -38,17 +65,13 @@ def webhook():
     
     if not user_message or not reply_token:
         return jsonify({"error": "No message received"}), 400
-
-    # ตรวจจับข้อความค้นหา เช่น "หา iPhone ราคาถูก"
-    if "หา" in user_message and "Shopee" in user_message:
-        # สร้าง Affiliate Link
-        affiliate_link = generate_affiliate_link("https://shopee.co.th/")
-        ai_reply = f"🔗 ลองดูสินค้าบน Shopee ได้ที่นี่: {affiliate_link}"
-    else:
-        ai_reply = "ขออภัย ฉันไม่สามารถช่วยคุณได้ในตอนนี้"
-
-    reply_to_line(reply_token, ai_reply)
-    return jsonify({"status": "success", "reply": ai_reply})
+    
+    analyzed_query = analyze_query(user_message)
+    product_link = generate_shopee_link(analyzed_query)
+    
+    status = reply_to_line(reply_token, product_link)
+    
+    return jsonify({"status": status, "reply": product_link})
 
 if __name__ == "__main__":
     app.run(port=5000)
