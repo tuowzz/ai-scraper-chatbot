@@ -5,9 +5,10 @@ import os
 
 app = Flask(__name__)
 
-# ตั้งค่า API Key และ Affiliate ID
-SHOPEE_AFFILIATE_ID = "15384150058"  # ใส่ Affiliate ID ที่ถูกต้อง
+# ตั้งค่า Affiliate ID และ Token
+SHOPEE_AFFILIATE_ID = "15384150058"  # ใส่ Affiliate ID ของ Shopee
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "")
+BITLY_ACCESS_TOKEN = os.getenv("BITLY_ACCESS_TOKEN", "")
 
 LINE_REPLY_URL = "https://api.line.me/v2/bot/message/reply"
 
@@ -15,10 +16,31 @@ if not LINE_CHANNEL_ACCESS_TOKEN:
     print("⚠️ LINE_CHANNEL_ACCESS_TOKEN is missing. Please set it in environment variables.")
     exit(1)
 
-# ฟังก์ชันสร้างลิงก์ค้นหา Shopee
-def get_shopee_search_link(keyword):
-    base_url = "https://shopee.co.th/search"
-    return f"{base_url}?keyword={keyword}&af_id={SHOPEE_AFFILIATE_ID}"
+# ฟังก์ชันสร้างลิงก์ Shopee (เลือกว่าจะใช้เว็บลิงก์หรือ Deeplink)
+def get_shopee_link(keyword, is_mobile=False):
+    if is_mobile:
+        # Deeplink สำหรับเปิดแอป Shopee บนมือถือ
+        shopee_link = f"shopee://search?keyword={keyword}&af_id={SHOPEE_AFFILIATE_ID}"
+    else:
+        # ลิงก์ค้นหา Shopee ปกติ
+        shopee_link = f"https://shopee.co.th/search?keyword={keyword}&af_id={SHOPEE_AFFILIATE_ID}"
+
+    return shorten_url(shopee_link)
+
+# ฟังก์ชันย่อลิงก์ด้วย Bitly
+def shorten_url(long_url):
+    if not BITLY_ACCESS_TOKEN:
+        return long_url  # ถ้าไม่มี Bitly Token ให้ใช้ลิงก์ยาว
+    try:
+        headers = {"Authorization": f"Bearer {BITLY_ACCESS_TOKEN}", "Content-Type": "application/json"}
+        data = {"long_url": long_url}
+        response = requests.post("https://api-ssl.bitly.com/v4/shorten", headers=headers, json=data)
+        if response.status_code == 200:
+            return response.json().get("link", long_url)
+        else:
+            return long_url
+    except Exception as e:
+        return long_url
 
 # ฟังก์ชันส่งข้อความกลับไปยัง LINE
 def reply_to_line(reply_token, message):
@@ -47,9 +69,12 @@ def webhook():
     if not user_message or not reply_token:
         return jsonify({"error": "No message received"}), 400
 
+    # ตรวจสอบว่าเป็นมือถือหรือไม่ (สามารถใช้ User-Agent ได้ถ้ารองรับ)
+    is_mobile = True  # ตั้งค่าเป็น True เพื่อใช้ Deeplink
+
     # สร้างลิงก์ Shopee
-    search_link = get_shopee_search_link(user_message)
-    response_message = f"🔎 ค้นหาสินค้าเกี่ยวกับ: {user_message}\n👉 ลิงก์ Shopee (Affiliate): {search_link}"
+    search_link = get_shopee_link(user_message, is_mobile)
+    response_message = f"🔎 ค้นหาสินค้าเกี่ยวกับ: {user_message}\n👉 ลิงก์ Shopee: {search_link}"
 
     # ส่งข้อความตอบกลับไปยัง LINE
     status = reply_to_line(reply_token, response_message)
