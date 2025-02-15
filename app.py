@@ -1,33 +1,37 @@
 import requests
-from flask import Flask, request, jsonify
-import json
 import os
+import json
+from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-# ตั้งค่า API Key จาก Environment Variables
-SHOPEE_AFFILIATE_ID = os.getenv("SHOPEE_AFFILIATE_ID", "15384150058")
-LAZADA_AFFILIATE_ID = os.getenv("LAZADA_AFFILIATE_ID", "272261049")
-TIKTOK_AFFILIATE_ID = os.getenv("TIKTOK_AFFILIATE_ID", "7494437765104241417")
-LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "")
-LINE_REPLY_URL = "https://api.line.me/v2/bot/message/reply"
+# 🔑 ตั้งค่า Affiliate ID
+SHOPEE_AFFILIATE_ID = "15384150058"
+LAZADA_AFFILIATE_ID = "272261049"
+TIKTOK_AFFILIATE_ID = "7494437765104241417"
 
-if not LINE_CHANNEL_ACCESS_TOKEN:
-    print("⚠️ LINE_CHANNEL_ACCESS_TOKEN is missing. Please set it in environment variables.")
-    sys.exit(1)
+# 🔗 ฟังก์ชันสร้างลิงก์ Shopee
+def generate_shopee_link(keyword):
+    base_url = "https://shopee.co.th/search"
+    return f"{base_url}?keyword={keyword}&af_id={SHOPEE_AFFILIATE_ID}"
 
-# ฟังก์ชันสร้างลิงก์ค้นหาสินค้า
-def generate_affiliate_links(keyword):
-    search_term = keyword.replace(" ", "+")
-    
-    shopee_link = f"https://shopee.co.th/search?keyword={search_term}&af_id={SHOPEE_AFFILIATE_ID}"
-    lazada_link = f"https://www.lazada.co.th/catalog/?q={search_term}&sub_aff_id={LAZADA_AFFILIATE_ID}"
-    tiktok_link = f"https://s.tiktok.com/search?q={search_term}&aid={TIKTOK_AFFILIATE_ID}"
-    
-    return shopee_link, lazada_link, tiktok_link
+# 🔗 ฟังก์ชันสร้างลิงก์ Lazada
+def generate_lazada_link(keyword):
+    base_url = "https://www.lazada.co.th/catalog/"
+    return f"{base_url}?q={keyword}&sub_aff_id={LAZADA_AFFILIATE_ID}"
 
-# ฟังก์ชันส่งข้อความกลับไปยัง LINE
+# 🔗 ฟังก์ชันสร้างลิงก์ TikTok
+def generate_tiktok_link():
+    # ใช้ vt.tiktok.com เพื่อให้เปิดแอปได้โดยตรง
+    response = requests.get(f"https://vt.tiktok.com/{TIKTOK_AFFILIATE_ID}/")
+    if response.status_code == 200:
+        return response.url
+    else:
+        return f"https://www.tiktok.com/?aff_id={TIKTOK_AFFILIATE_ID}"
+
+# 📩 ฟังก์ชันตอบกลับข้อความไปยัง LINE
 def reply_to_line(reply_token, message):
+    LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "")
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}"
@@ -36,10 +40,9 @@ def reply_to_line(reply_token, message):
         "replyToken": reply_token,
         "messages": [{"type": "text", "text": message}]
     }
-    response = requests.post(LINE_REPLY_URL, headers=headers, data=json.dumps(payload))
-    return response.status_code
+    requests.post("https://api.line.me/v2/bot/message/reply", headers=headers, json=payload)
 
-# LINE Webhook
+# 🎯 LINE Webhook API
 @app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.json
@@ -49,21 +52,27 @@ def webhook():
     event = data["events"][0]
     user_message = event.get("message", {}).get("text", "")
     reply_token = event.get("replyToken", "")
-    
+
     if not user_message or not reply_token:
         return jsonify({"error": "No message received"}), 400
-    
-    shopee_link, lazada_link, tiktok_link = generate_affiliate_links(user_message)
-    
-    response_message = (f"\U0001F50D ค้นหาสินค้าเกี่ยวกับ: {user_message}\n\n"
-                         f"🛒 Shopee: {shopee_link}\n"
-                         f"🛍 Lazada: {lazada_link}\n"
-                         f"🎵 TikTok Shop: {tiktok_link}")
-    
-    # ส่งข้อความตอบกลับไปยัง LINE
-    status = reply_to_line(reply_token, response_message)
-    
-    return jsonify({"status": status, "reply": response_message})
+
+    # 🔍 ค้นหาสินค้า
+    shopee_link = generate_shopee_link(user_message)
+    lazada_link = generate_lazada_link(user_message)
+    tiktok_link = generate_tiktok_link()
+
+    # 📌 สร้างข้อความตอบกลับ
+    reply_message = (
+        f"🔎 ค้นหาสินค้าเกี่ยวกับ: {user_message}\n\n"
+        f"🛒 Shopee: {shopee_link}\n"
+        f"🛍 Lazada: {lazada_link}\n"
+        f"🎵 TikTok Shop: {tiktok_link}"
+    )
+
+    # ส่งข้อความกลับไปยัง LINE
+    reply_to_line(reply_token, reply_message)
+
+    return jsonify({"status": "ok"})
 
 if __name__ == "__main__":
     app.run(port=5000)
