@@ -8,6 +8,7 @@ app = Flask(__name__)
 # ตั้งค่า Affiliate ID และ Token
 SHOPEE_AFFILIATE_ID = "15384150058"  # ใส่ Affiliate ID ของ Shopee
 LAZADA_AFFILIATE_ID = "272261049"  # ใส่ Affiliate ID ของ Lazada
+TIKTOK_AFFILIATE_ID = "7494437765104241417"  # ใส่ Affiliate ID ของ TikTok
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "")
 BITLY_ACCESS_TOKEN = os.getenv("BITLY_ACCESS_TOKEN", "")
 
@@ -27,6 +28,12 @@ def get_shopee_search_link(keyword):
 def get_lazada_search_link(keyword):
     base_url = "https://www.lazada.co.th/catalog/"
     full_link = f"{base_url}?q={keyword}&sub_aff_id={LAZADA_AFFILIATE_ID}"
+    return shorten_url(full_link)
+
+# ฟังก์ชันสร้างลิงก์ TikTok Shop
+def get_tiktok_search_link(keyword):
+    base_url = "https://www.tiktok.com/shop"
+    full_link = f"{base_url}?q={keyword}&cid={TIKTOK_AFFILIATE_ID}"
     return shorten_url(full_link)
 
 # ฟังก์ชันย่อลิงก์ด้วย Bitly
@@ -71,14 +78,16 @@ def webhook():
     if not user_message or not reply_token:
         return jsonify({"error": "No message received"}), 400
 
-    # สร้างลิงก์ Shopee และ Lazada
+    # สร้างลิงก์ Shopee, Lazada และ TikTok
     shopee_link = get_shopee_search_link(user_message)
     lazada_link = get_lazada_search_link(user_message)
+    tiktok_link = get_tiktok_search_link(user_message)
     
     response_message = (
         f"🔎 ค้นหาสินค้าเกี่ยวกับ: {user_message}\n\n"
         f"🛒 Shopee: {shopee_link}\n\n"
-        f"🛍 Lazada: {lazada_link}"
+        f"🛍 Lazada: {lazada_link}\n\n"
+        f"🎵 TikTok Shop: {tiktok_link}"
     )
 
     # ส่งข้อความตอบกลับไปยัง LINE
