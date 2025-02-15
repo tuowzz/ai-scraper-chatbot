@@ -33,8 +33,8 @@ def get_lazada_search_link(keyword):
 # ฟังก์ชันสร้างลิงก์ TikTok Shop (ใช้ Universal Link เพื่อเปิดแอป TikTok)
 def get_tiktok_search_link(keyword):
     base_url = "https://www.tiktok.com/search"
-    universal_link = f"tiktok://search?q={keyword}"  # ใช้ลิงก์เปิดแอปโดยตรง
-    return shorten_url(universal_link)
+    full_link = f"{base_url}?q={keyword}"
+    return shorten_url(full_link)
 
 # ฟังก์ชันย่อลิงก์ด้วย Bitly
 def shorten_url(long_url):
@@ -82,7 +82,7 @@ def webhook():
     shopee_link = get_shopee_search_link(user_message)
     lazada_link = get_lazada_search_link(user_message)
     tiktok_link = get_tiktok_search_link(user_message)
-    
+
     response_message = (
         f"🔎 ค้นหาสินค้าเกี่ยวกับ: {user_message}\n\n"
         f"🛒 Shopee: {shopee_link}\n\n"
