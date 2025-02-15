@@ -14,13 +14,14 @@ LINE_REPLY_URL = "https://api.line.me/v2/bot/message/reply"
 
 if not OPENAI_API_KEY:
     print("⚠️ OPENAI_API_KEY is missing. Please set it in environment variables.")
-    exit(1)
 if not LINE_CHANNEL_ACCESS_TOKEN:
     print("⚠️ LINE_CHANNEL_ACCESS_TOKEN is missing. Please set it in environment variables.")
-    exit(1)
 
-# ฟังก์ชันใช้ OpenAI วิเคราะห์คำค้นหา (รองรับ OpenAI >=1.0.0)
+# ฟังก์ชันใช้ OpenAI วิเคราะห์คำค้นหา (เช็คโควต้าก่อนใช้)
 def analyze_search_query(user_message):
+    if not OPENAI_API_KEY:
+        return user_message  # ถ้าไม่มี API Key ให้ใช้คำค้นหาเดิม
+    
     try:
         client = openai.OpenAI(api_key=OPENAI_API_KEY)
         response = client.chat.completions.create(
@@ -31,7 +32,9 @@ def analyze_search_query(user_message):
             ]
         )
         return response.choices[0].message.content.strip()
-    except Exception as e:
+    except openai.APIError as e:
+        if "insufficient_quota" in str(e):
+            return user_message  # ถ้าโควต้าหมด ให้ใช้คำค้นหาเดิม
         return f"⚠️ Error: {str(e)}"
 
 # ฟังก์ชันสร้างลิงก์ Shopee Affiliate
@@ -65,18 +68,14 @@ def webhook():
     if not user_message or not reply_token:
         return jsonify({"error": "No message received"}), 400
 
-    # ใช้ AI วิเคราะห์คำค้นหา
+    # ใช้ AI วิเคราะห์คำค้นหา ถ้าโควต้าหมด ให้ใช้คำค้นหาเดิม
     search_query = analyze_search_query(user_message)
 
-    # เช็คว่ามี Error หรือไม่
-    if "⚠️ Error:" in search_query:
-        reply_message = f"❌ ไม่สามารถค้นหาสินค้าได้\n\n{search_query}"
-    else:
-        # สร้างลิงก์ Shopee Affiliate
-        shopee_link = generate_shopee_link(search_query)
+    # สร้างลิงก์ Shopee Affiliate
+    shopee_link = generate_shopee_link(search_query)
 
-        # สร้างข้อความตอบกลับ
-        reply_message = f"🔎 ค้นหาสินค้าเกี่ยวกับ: {search_query}\n\n👉 ลิงก์ Shopee: {shopee_link}"
+    # สร้างข้อความตอบกลับ
+    reply_message = f"🔎 ค้นหาสินค้าเกี่ยวกับ: {search_query}\n\n👉 ลิงก์ Shopee: {shopee_link}"
 
     # ส่งข้อความกลับไปยัง LINE
     reply_to_line(reply_token, reply_message)
