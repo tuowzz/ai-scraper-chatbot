@@ -30,11 +30,11 @@ def get_lazada_search_link(keyword):
     full_link = f"{base_url}?q={keyword}&sub_aff_id={LAZADA_AFFILIATE_ID}"
     return shorten_url(full_link)
 
-# ฟังก์ชันสร้างลิงก์ TikTok Shop (ไปยังคีย์เวิร์ดโดยตรง)
-def get_tiktok_search_link(keyword):
-    base_url = "https://www.tiktok.com/search"
-    full_link = f"{base_url}?q={keyword}&source=affiliate&cid={TIKTOK_AFFILIATE_ID}"
-    return shorten_url(full_link)
+# ฟังก์ชันสร้างลิงก์ TikTok Shop (ใช้ลิงก์แบบ vt.tiktok.com ที่เปิดแอปได้)
+def get_tiktok_affiliate_link():
+    base_url = "https://vt.tiktok.com/"
+    affiliate_link = f"{base_url}?cid={TIKTOK_AFFILIATE_ID}"
+    return shorten_url(affiliate_link)
 
 # ฟังก์ชันย่อลิงก์ด้วย Bitly
 def shorten_url(long_url):
@@ -81,7 +81,7 @@ def webhook():
     # สร้างลิงก์ Shopee, Lazada และ TikTok
     shopee_link = get_shopee_search_link(user_message)
     lazada_link = get_lazada_search_link(user_message)
-    tiktok_link = get_tiktok_search_link(user_message)
+    tiktok_link = get_tiktok_affiliate_link()
     
     response_message = (
         f"🔎 ค้นหาสินค้าเกี่ยวกับ: {user_message}\n\n"
