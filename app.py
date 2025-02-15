@@ -35,11 +35,12 @@ def scrape_shopee(keyword):
         try:
             name = product.find("div", class_="_10Wbs-")
             price = product.find("span", class_="_29R_un")
-            if name and price:
+            link = product.find("a", href=True)
+            if name and price and link:
                 products.append({
                     "name": name.text,
                     "price": price.text,
-                    "link": f"https://shope.ee/{SHOPEE_AFFILIATE_ID}"
+                    "link": f"https://shopee.co.th{link['href']}"
                 })
         except AttributeError:
             continue
@@ -49,15 +50,15 @@ def scrape_shopee(keyword):
 # ฟังก์ชันใช้ OpenAI ตอบลูกค้า
 def chat_with_ai(user_message):
     try:
-        client = openai.OpenAI(api_key=OPENAI_API_KEY)
-        response = client.chat.completions.create(
-            model="gpt-4",
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "คุณเป็นแชทบอทแนะนำสินค้าราคาถูก"},
                 {"role": "user", "content": user_message}
-            ]
+            ],
+            api_key=OPENAI_API_KEY
         )
-        return response.choices[0].message.content
+        return response["choices"][0]["message"]["content"]
     except Exception as e:
         return f"⚠️ Error occurred while communicating with OpenAI: {str(e)}"
 
@@ -88,17 +89,23 @@ def webhook():
     if not user_message or not reply_token:
         return jsonify({"error": "No message received"}), 400
     
-    ai_reply = chat_with_ai(user_message)
+    if "หา" in user_message:
+        products = scrape_shopee(user_message.replace("หา ", ""))
+        if products:
+            ai_reply = "\n".join([f"{p['name']} ราคา: {p['price']}\n{p['link']}" for p in products])
+        else:
+            ai_reply = "ขออภัย ไม่พบสินค้าที่ค้นหา"
+    else:
+        ai_reply = chat_with_ai(user_message)
     
     # ส่งข้อความตอบกลับไปยัง LINE
     status = reply_to_line(reply_token, ai_reply)
     
     return jsonify({"status": status, "reply": ai_reply})
 
-# Health Check
 @app.route("/", methods=["GET"])
-def health_check():
-    return jsonify({"message": "Server is running!"})
+def home():
+    return jsonify({"message": "Server is running"})
 
 if __name__ == "__main__":
-    app.run(port=10000)
+    app.run(host="0.0.0.0", port=10000)
