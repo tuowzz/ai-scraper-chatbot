@@ -6,9 +6,9 @@ import os
 app = Flask(__name__)
 
 # ตั้งค่า Affiliate ID และ Token
-SHOPEE_AFFILIATE_ID = "15384150058"  # ใส่ Affiliate ID ของ Shopee
-LAZADA_AFFILIATE_ID = "272261049"  # ใส่ Affiliate ID ของ Lazada
-TIKTOK_AFFILIATE_ID = "7494437765104241417"  # ใส่ Affiliate ID ของ TikTok
+SHOPEE_AFFILIATE_ID = "15384150058"
+LAZADA_AFFILIATE_ID = "272261049"
+TIKTOK_AFFILIATE_ID = "7494437765104241417"  
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "")
 BITLY_ACCESS_TOKEN = os.getenv("BITLY_ACCESS_TOKEN", "")
 
@@ -18,7 +18,7 @@ if not LINE_CHANNEL_ACCESS_TOKEN:
     print("⚠️ LINE_CHANNEL_ACCESS_TOKEN is missing. Please set it in environment variables.")
     exit(1)
 
-# ฟังก์ชันสร้างลิงก์ Shopee (ใช้ Universal Link ที่กดได้)
+# ฟังก์ชันสร้างลิงก์ Shopee
 def get_shopee_search_link(keyword):
     base_url = "https://shopee.co.th/search"
     full_link = f"{base_url}?keyword={keyword}&af_id={SHOPEE_AFFILIATE_ID}"
@@ -30,11 +30,11 @@ def get_lazada_search_link(keyword):
     full_link = f"{base_url}?q={keyword}&sub_aff_id={LAZADA_AFFILIATE_ID}"
     return shorten_url(full_link)
 
-# ฟังก์ชันสร้างลิงก์ TikTok Shop (ใช้ Universal Link เพื่อเปิดแอป TikTok)
-def get_tiktok_search_link(keyword):
-    base_url = "https://www.tiktok.com/search"
-    full_link = f"{base_url}?q={keyword}"
-    return shorten_url(full_link)
+# ฟังก์ชันสร้างลิงก์ TikTok Shop (ใช้ Deep Link ที่เปิดแอปได้)
+def get_tiktok_deep_link():
+    # ลิงก์นี้ต้องสร้างจาก TikTok Shop Seller Center หรือ Creator Marketplace
+    deep_link = "https://vm.tiktok.com/ZMxxxxxxx/"  # ใส่ลิงก์ TikTok ที่สร้างจากระบบ
+    return shorten_url(deep_link)
 
 # ฟังก์ชันย่อลิงก์ด้วย Bitly
 def shorten_url(long_url):
@@ -81,7 +81,7 @@ def webhook():
     # สร้างลิงก์ Shopee, Lazada และ TikTok
     shopee_link = get_shopee_search_link(user_message)
     lazada_link = get_lazada_search_link(user_message)
-    tiktok_link = get_tiktok_search_link(user_message)
+    tiktok_link = get_tiktok_deep_link()  # ใช้ลิงก์ที่เปิดแอปได้จริง
 
     response_message = (
         f"🔎 ค้นหาสินค้าเกี่ยวกับ: {user_message}\n\n"
