@@ -30,11 +30,11 @@ def get_lazada_search_link(keyword):
     full_link = f"{base_url}?q={keyword}&sub_aff_id={LAZADA_AFFILIATE_ID}"
     return shorten_url(full_link)
 
-# ฟังก์ชันสร้างลิงก์ TikTok Shop
+# ฟังก์ชันสร้างลิงก์ TikTok Shop (ใช้ Universal Link เพื่อเปิดแอป TikTok)
 def get_tiktok_search_link(keyword):
-    base_url = "https://www.tiktok.com/shop"
-    full_link = f"{base_url}?q={keyword}&cid={TIKTOK_AFFILIATE_ID}"
-    return shorten_url(full_link)
+    base_url = "https://www.tiktok.com/search"
+    universal_link = f"tiktok://search?q={keyword}"  # ใช้ลิงก์เปิดแอปโดยตรง
+    return shorten_url(universal_link)
 
 # ฟังก์ชันย่อลิงก์ด้วย Bitly
 def shorten_url(long_url):
