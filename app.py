@@ -15,10 +15,10 @@ LINE_REPLY_URL = "https://api.line.me/v2/bot/message/reply"
 
 if not OPENAI_API_KEY:
     print("⚠️ OPENAI_API_KEY is missing. Please set it in environment variables.")
-    sys.exit(1)
+    exit(1)
 if not LINE_CHANNEL_ACCESS_TOKEN:
     print("⚠️ LINE_CHANNEL_ACCESS_TOKEN is missing. Please set it in environment variables.")
-    sys.exit(1)
+    exit(1)
 
 # ฟังก์ชันดึงข้อมูลจาก Shopee
 def scrape_shopee(keyword):
@@ -49,15 +49,15 @@ def scrape_shopee(keyword):
 # ฟังก์ชันใช้ OpenAI ตอบลูกค้า
 def chat_with_ai(user_message):
     try:
-        response = openai.ChatCompletion.create(
+        client = openai.OpenAI(api_key=OPENAI_API_KEY)
+        response = client.chat.completions.create(
             model="gpt-4",
             messages=[
                 {"role": "system", "content": "คุณเป็นแชทบอทแนะนำสินค้าราคาถูก"},
                 {"role": "user", "content": user_message}
-            ],
-            api_key=OPENAI_API_KEY
+            ]
         )
-        return response["choices"][0]["message"]["content"]
+        return response.choices[0].message.content
     except Exception as e:
         return f"⚠️ Error occurred while communicating with OpenAI: {str(e)}"
 
@@ -95,9 +95,10 @@ def webhook():
     
     return jsonify({"status": status, "reply": ai_reply})
 
+# Health Check
 @app.route("/", methods=["GET"])
-def home():
-    return jsonify({"message": "Server is running"})
+def health_check():
+    return jsonify({"message": "Server is running!"})
 
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=10000)
+    app.run(port=10000)
