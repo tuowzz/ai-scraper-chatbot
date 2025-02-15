@@ -25,7 +25,7 @@ def get_shopee_search_link(keyword):
 
 # ฟังก์ชันสร้างลิงก์ Lazada
 def get_lazada_search_link(keyword):
-    base_url = "https://s.lazada.co.th/s"
+    base_url = "https://www.lazada.co.th/catalog/"
     full_link = f"{base_url}?q={keyword}&sub_aff_id={LAZADA_AFFILIATE_ID}"
     return shorten_url(full_link)
 
