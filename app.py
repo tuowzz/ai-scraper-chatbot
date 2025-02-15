@@ -19,24 +19,25 @@ if not LINE_CHANNEL_ACCESS_TOKEN:
     print("⚠️ LINE_CHANNEL_ACCESS_TOKEN is missing. Please set it in environment variables.")
     exit(1)
 
-# ฟังก์ชันใช้ OpenAI วิเคราะห์คำค้นหา
+# ฟังก์ชันใช้ OpenAI วิเคราะห์คำค้นหา (รองรับ OpenAI >=1.0.0)
 def analyze_search_query(user_message):
     try:
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",  # ใช้ gpt-3.5-turbo เพื่อความเสถียร
+        client = openai.OpenAI(api_key=OPENAI_API_KEY)
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "คุณเป็น AI ช่วยแนะนำสินค้าบน Shopee"},
                 {"role": "user", "content": f"ช่วยค้นหาสินค้าที่เกี่ยวข้องกับ: {user_message}"}
-            ],
-            api_key=OPENAI_API_KEY
+            ]
         )
-        return response["choices"][0]["message"]["content"]
+        return response.choices[0].message.content.strip()
     except Exception as e:
         return f"⚠️ Error: {str(e)}"
 
 # ฟังก์ชันสร้างลิงก์ Shopee Affiliate
 def generate_shopee_link(keyword):
-    return f"https://shope.ee/{SHOPEE_AFFILIATE_ID}?keyword={keyword.replace(' ', '+')}"
+    safe_keyword = keyword.replace(" ", "+")[:50]  # จำกัดความยาวให้ไม่ยาวเกินไป
+    return f"https://shope.ee/{SHOPEE_AFFILIATE_ID}?keyword={safe_keyword}"
 
 # ฟังก์ชันส่งข้อความกลับไปยัง LINE
 def reply_to_line(reply_token, message):
@@ -67,11 +68,15 @@ def webhook():
     # ใช้ AI วิเคราะห์คำค้นหา
     search_query = analyze_search_query(user_message)
 
-    # สร้างลิงก์ Shopee Affiliate
-    shopee_link = generate_shopee_link(search_query)
+    # เช็คว่ามี Error หรือไม่
+    if "⚠️ Error:" in search_query:
+        reply_message = f"❌ ไม่สามารถค้นหาสินค้าได้\n\n{search_query}"
+    else:
+        # สร้างลิงก์ Shopee Affiliate
+        shopee_link = generate_shopee_link(search_query)
 
-    # สร้างข้อความตอบกลับ
-    reply_message = f"🔎 ค้นหาสินค้าเกี่ยวกับ: {search_query}\n\n👉 ลิงก์ Shopee: {shopee_link}"
+        # สร้างข้อความตอบกลับ
+        reply_message = f"🔎 ค้นหาสินค้าเกี่ยวกับ: {search_query}\n\n👉 ลิงก์ Shopee: {shopee_link}"
 
     # ส่งข้อความกลับไปยัง LINE
     reply_to_line(reply_token, reply_message)
