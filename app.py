@@ -16,16 +16,11 @@ if not LINE_CHANNEL_ACCESS_TOKEN:
     print("⚠️ LINE_CHANNEL_ACCESS_TOKEN is missing. Please set it in environment variables.")
     exit(1)
 
-# ฟังก์ชันสร้างลิงก์ Shopee (เลือกว่าจะใช้เว็บลิงก์หรือ Deeplink)
-def get_shopee_link(keyword, is_mobile=False):
-    if is_mobile:
-        # Deeplink สำหรับเปิดแอป Shopee บนมือถือ
-        shopee_link = f"shopee://search?keyword={keyword}&af_id={SHOPEE_AFFILIATE_ID}"
-    else:
-        # ลิงก์ค้นหา Shopee ปกติ
-        shopee_link = f"https://shopee.co.th/search?keyword={keyword}&af_id={SHOPEE_AFFILIATE_ID}"
-
-    return shorten_url(shopee_link)
+# ฟังก์ชันสร้างลิงก์ Shopee (ใช้ Universal Link ที่กดได้)
+def get_shopee_search_link(keyword):
+    base_url = "https://shopee.co.th/search"
+    full_link = f"{base_url}?keyword={keyword}&af_id={SHOPEE_AFFILIATE_ID}"
+    return shorten_url(full_link)
 
 # ฟังก์ชันย่อลิงก์ด้วย Bitly
 def shorten_url(long_url):
@@ -69,11 +64,8 @@ def webhook():
     if not user_message or not reply_token:
         return jsonify({"error": "No message received"}), 400
 
-    # ตรวจสอบว่าเป็นมือถือหรือไม่ (สามารถใช้ User-Agent ได้ถ้ารองรับ)
-    is_mobile = True  # ตั้งค่าเป็น True เพื่อใช้ Deeplink
-
     # สร้างลิงก์ Shopee
-    search_link = get_shopee_link(user_message, is_mobile)
+    search_link = get_shopee_search_link(user_message)
     response_message = f"🔎 ค้นหาสินค้าเกี่ยวกับ: {user_message}\n👉 ลิงก์ Shopee: {search_link}"
 
     # ส่งข้อความตอบกลับไปยัง LINE
