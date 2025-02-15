@@ -20,7 +20,7 @@ if not LINE_CHANNEL_ACCESS_TOKEN:
     exit(1)
 
 # ฟังก์ชันตรวจสอบว่าเซิร์ฟเวอร์ทำงานอยู่
-@app.route("/", methods=["GET"])
+@app.route("/webhook", methods=["POST"])
 def home():
     return jsonify({"message": "Server is running!"}), 200
 
