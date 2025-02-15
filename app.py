@@ -8,7 +8,6 @@ app = Flask(__name__)
 # 🔑 ตั้งค่า Affiliate ID
 SHOPEE_AFFILIATE_ID = "15384150058"
 LAZADA_AFFILIATE_ID = "272261049"
-TIKTOK_AFFILIATE_ID = "7494437765104241417"
 
 # 🔗 ฟังก์ชันสร้างลิงก์ Shopee
 def generate_shopee_link(keyword):
@@ -19,15 +18,6 @@ def generate_shopee_link(keyword):
 def generate_lazada_link(keyword):
     base_url = "https://www.lazada.co.th/catalog/"
     return f"{base_url}?q={keyword}&sub_aff_id={LAZADA_AFFILIATE_ID}"
-
-# 🔗 ฟังก์ชันสร้างลิงก์ TikTok
-def generate_tiktok_link():
-    # ใช้ vt.tiktok.com เพื่อให้เปิดแอปได้โดยตรง
-    response = requests.get(f"https://vt.tiktok.com/{TIKTOK_AFFILIATE_ID}/")
-    if response.status_code == 200:
-        return response.url
-    else:
-        return f"https://www.tiktok.com/?aff_id={TIKTOK_AFFILIATE_ID}"
 
 # 📩 ฟังก์ชันตอบกลับข้อความไปยัง LINE
 def reply_to_line(reply_token, message):
@@ -59,14 +49,12 @@ def webhook():
     # 🔍 ค้นหาสินค้า
     shopee_link = generate_shopee_link(user_message)
     lazada_link = generate_lazada_link(user_message)
-    tiktok_link = generate_tiktok_link()
 
     # 📌 สร้างข้อความตอบกลับ
     reply_message = (
         f"🔎 ค้นหาสินค้าเกี่ยวกับ: {user_message}\n\n"
         f"🛒 Shopee: {shopee_link}\n"
-        f"🛍 Lazada: {lazada_link}\n"
-        f"🎵 TikTok Shop: {tiktok_link}"
+        f"🛍 Lazada: {lazada_link}"
     )
 
     # ส่งข้อความกลับไปยัง LINE
