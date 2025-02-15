@@ -71,5 +71,5 @@ def webhook():
     
     return jsonify({"status": status, "reply": ai_reply})
 
-if name == "__main__":
+if __name__ == "__main__":
     app.run(port=5000, host="0.0.0.0")
