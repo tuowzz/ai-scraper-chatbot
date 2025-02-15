@@ -1,3 +1,4 @@
+from flask import Flask, request, jsonify
 from flask import Flask
 
 app = Flask(__name__)
@@ -29,3 +30,8 @@ def webhook():
     status = reply_to_line(reply_token, ai_reply)
 
     return jsonify({"status": status, "reply": ai_reply}), 200
+@app.route("/webhook", methods=["POST"])
+def webhook():
+    data = request.json  # ใช้ request.json เพื่อดึงข้อมูล
+    if "events" not in data or not data["events"]:
+        return jsonify({"error": "Invalid request"}), 400
