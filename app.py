@@ -1,9 +1,6 @@
 import os
 import json
 import requests
-import time
-import hmac
-import hashlib
 from flask import Flask, request, jsonify
 
 app = Flask(__name__)
@@ -14,38 +11,13 @@ SHOPEE_AFFILIATE_ID = os.getenv("SHOPEE_AFFILIATE_ID")
 LAZADA_AFFILIATE_ID = os.getenv("LAZADA_AFFILIATE_ID")
 BITLY_ACCESS_TOKEN = os.getenv("BITLY_ACCESS_TOKEN")
 
-# ค้นหาสินค้า Shopee โดยตรง
-def generate_shopee_product_link(keyword):
-    search_url = f"https://shopee.co.th/api/v4/search/search_items?keyword={keyword}"
-    headers = {"User-Agent": "Mozilla/5.0"}
-    response = requests.get(search_url, headers=headers)
-    
-    if response.status_code == 200:
-        data = response.json()
-        if "items" in data and len(data["items"]) > 0:
-            item = data["items"][0]
-            shop_id = item["shopid"]
-            item_id = item["itemid"]
-            return f"https://shopee.co.th/product/{shop_id}/{item_id}?af_id={SHOPEE_AFFILIATE_ID}"
-    return f"https://shopee.co.th/search?keyword={keyword}&af_id={SHOPEE_AFFILIATE_ID}"
+# Shopee Flash Sale Link (ไม่ใช้ API)
+def generate_shopee_flashsale_link():
+    return f"https://shopee.co.th/m/flash_sale?af_id={SHOPEE_AFFILIATE_ID}"
 
-# ค้นหาสินค้า Lazada โดยตรง
-def generate_lazada_product_link(keyword):
-    search_url = f"https://www.lazada.co.th/catalog/?q={keyword}&sub_aff_id={LAZADA_AFFILIATE_ID}"
-    return search_url
-
-# ย่อลิงก์ด้วย Bitly API
-def shorten_link(url):
-    if not BITLY_ACCESS_TOKEN:
-        return url  # ถ้าไม่มี Bitly Token ให้ใช้ลิงก์ยาว
-    
-    headers = {
-        "Authorization": f"Bearer {BITLY_ACCESS_TOKEN}",
-        "Content-Type": "application/json"
-    }
-    data = {"long_url": url}
-    response = requests.post("https://api-ssl.bitly.com/v4/shorten", json=data, headers=headers)
-    return response.json().get("link", url)
+# Lazada Flash Sale Link (ไม่ใช้ API)
+def generate_lazada_flashsale_link():
+    return f"https://www.lazada.co.th/deals/?sub_aff_id={LAZADA_AFFILIATE_ID}"
 
 # LINE Webhook
 @app.route("/webhook", methods=["POST"])
@@ -59,16 +31,12 @@ def webhook():
             text = event["message"]["text"]
             reply_token = event["replyToken"]
             
-            shopee_link = generate_shopee_product_link(text)
-            lazada_link = generate_lazada_product_link(text)
+            shopee_link = generate_shopee_flashsale_link()
+            lazada_link = generate_lazada_flashsale_link()
             
-            # ย่อลิงก์ถ้าใช้ Bitly
-            shopee_link = shorten_link(shopee_link)
-            lazada_link = shorten_link(lazada_link)
-            
-            response_text = (f"🔎 ค้นหาสินค้าเกี่ยวกับ: {text}\n\n"
-                             f"🛒 Shopee: \n➡️ {shopee_link}\n\n"
-                             f"🛍 Lazada: \n➡️ {lazada_link}\n\n"
+            response_text = (f"🔎 ค้นหาสินค้า Flash Sale ตอนนี้! \n\n"
+                             f"🛒 Shopee Flash Sale: \n➡️ {shopee_link}\n\n"
+                             f"🛍 Lazada Flash Sale: \n➡️ {lazada_link}\n\n"
                              f"🔥 โปรโมชั่นมาแรง! รีบสั่งซื้อตอนนี้ก่อนสินค้าหมด 🔥")
             
             send_line_message(reply_token, response_text)
