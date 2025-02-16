@@ -1,8 +1,8 @@
 import os
 import json
 import requests
-import time  # ✅ แก้ไข - เพิ่มการ import time
-import hashlib  # ✅ แก้ไข - เพิ่มการ import hashlib
+import time  
+import hashlib  
 from flask import Flask, request, jsonify
 
 app = Flask(__name__)
@@ -10,9 +10,9 @@ app = Flask(__name__)
 # Load environment variables
 LINE_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 SHOPEE_AFFILIATE_ID = os.getenv("SHOPEE_AFFILIATE_ID")
-LAZADA_AFFILIATE_APP_KEY = os.getenv("LAZADA_AFFILIATE_APP_KEY")
-LAZADA_AFFILIATE_SECRET = os.getenv("LAZADA_AFFILIATE_SECRET")
-LAZADA_AFFILIATE_USER_TOKEN = os.getenv("LAZADA_AFFILIATE_USER_TOKEN")
+LAZADA_AFFILIATE_APP_KEY = os.getenv("LAZADA_AFFILIATE_APP_KEY", "")
+LAZADA_AFFILIATE_SECRET = os.getenv("LAZADA_AFFILIATE_SECRET", "")
+LAZADA_AFFILIATE_USER_TOKEN = os.getenv("LAZADA_AFFILIATE_USER_TOKEN", "")
 
 # Shopee Affiliate Link (Full Link)
 def generate_shopee_link(keyword):
@@ -21,26 +21,33 @@ def generate_shopee_link(keyword):
 
 # Lazada API Call for Affiliate Link
 def generate_lazada_link(keyword):
+    if not LAZADA_AFFILIATE_SECRET:
+        return "❌ Error: Missing Lazada API credentials"
+
     lazada_api_url = "https://api.lazada.com/rest"
     params = {
-        "app_key": LAZADA_AFFILIATE_APP_KEY,
+        "app_key": LAZADA_AFFILIATE_APP_KEY or "",
         "sign_method": "sha256",
-        "timestamp": str(int(time.time() * 1000)),  # ✅ ใช้ time อย่างถูกต้อง
-        "keyword": keyword,
-        "user_token": LAZADA_AFFILIATE_USER_TOKEN
+        "timestamp": str(int(time.time() * 1000)),  
+        "keyword": keyword or "",
+        "user_token": LAZADA_AFFILIATE_USER_TOKEN or ""
     }
-    
-    # Generate Signature
-    sorted_params = sorted(params.items())
-    sign_string = LAZADA_AFFILIATE_SECRET + "".join(f"{k}{v}" for k, v in sorted_params) + LAZADA_AFFILIATE_SECRET
-    params["sign"] = hashlib.sha256(sign_string.encode()).hexdigest()
 
-    response = requests.get(lazada_api_url, params=params)
-    if response.status_code == 200:
-        data = response.json()
-        if "data" in data and "product_url" in data["data"]:
-            return data["data"]["product_url"]
-    return "https://www.lazada.co.th/"
+    try:
+        # Generate Signature
+        sorted_params = sorted(params.items())
+        sign_string = LAZADA_AFFILIATE_SECRET + "".join(f"{k}{v}" for k, v in sorted_params) + LAZADA_AFFILIATE_SECRET
+        params["sign"] = hashlib.sha256(sign_string.encode()).hexdigest()
+
+        response = requests.get(lazada_api_url, params=params)
+        if response.status_code == 200:
+            data = response.json()
+            if "data" in data and "product_url" in data["data"]:
+                return data["data"]["product_url"]
+        return "https://www.lazada.co.th/"
+    
+    except Exception as e:
+        return f"❌ Error: {str(e)}"
 
 # Process LINE Messages
 @app.route("/webhook", methods=["POST"])
