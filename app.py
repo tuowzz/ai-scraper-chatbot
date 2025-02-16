@@ -1,97 +1,69 @@
-import requests
-try:
-    import openai
-except ModuleNotFoundError:
-    print("⚠️ OpenAI library not found. Please install it using 'pip install openai'")
-    import sys
-    sys.exit(1)
-from flask import Flask, request, jsonify
-import json
 import os
+import requests
+from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-# ตั้งค่า API Key จาก Environment Variables
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-SHOPEE_AFFILIATE_ID = os.getenv("SHOPEE_AFFILIATE_ID", "15384150058")
-LAZADA_AFFILIATE_ID = os.getenv("LAZADA_AFFILIATE_ID", "272261049")
-LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "")
-LINE_REPLY_URL = "https://api.line.me/v2/bot/message/reply"
+# Load environment variables
+LAZADA_AFFILIATE_ID = os.getenv("LAZADA_AFFILIATE_ID")
+LAZADA_APP_KEY = os.getenv("LAZADA_APP_KEY")
+LAZADA_APP_SECRET = os.getenv("LAZADA_APP_SECRET")
+LAZADA_USER_TOKEN = os.getenv("LAZADA_USER_TOKEN")
+SHOPEE_AFFILIATE_ID = os.getenv("SHOPEE_AFFILIATE_ID")
 
-if not OPENAI_API_KEY:
-    print("⚠️ OPENAI_API_KEY is missing. Please set it in environment variables.")
-    sys.exit(1)
-if not LINE_CHANNEL_ACCESS_TOKEN:
-    print("⚠️ LINE_CHANNEL_ACCESS_TOKEN is missing. Please set it in environment variables.")
-    sys.exit(1)
+# Shopee Search URL
+SHOPEE_SEARCH_URL = "https://shopee.co.th/search?keyword={}&af_id=" + SHOPEE_AFFILIATE_ID
 
-# ฟังก์ชันสร้างลิงก์ไปยัง Shopee, Lazada
+# Lazada Search API
+LAZADA_SEARCH_URL = "https://api.lazada.com/rest?app_key={}&sign_method=sha256"
 
-def generate_affiliate_links(keyword):
-    shopee_link = f"https://s.shopee.co.th/{SHOPEE_AFFILIATE_ID}?keyword={keyword}"
-    lazada_link = f"https://www.lazada.co.th/catalog/?q={keyword}&sub_aff_id={LAZADA_AFFILIATE_ID}"
-    
-    return shopee_link, lazada_link
-
-# ฟังก์ชันใช้ OpenAI ตอบลูกค้า
-
-def chat_with_ai(user_message):
+# Function to shorten URLs using Bitly or Lazada's shortener
+def shorten_url(long_url):
     try:
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "คุณเป็นแชทบอทแนะนำสินค้าและช่วยค้นหาสินค้าราคาถูก"},
-                {"role": "user", "content": user_message}
-            ],
-            api_key=OPENAI_API_KEY
-        )
-        return response["choices"][0]["message"]["content"]
-    except Exception as e:
-        return f"⚠️ Error occurred while communicating with OpenAI: {str(e)}"
+        response = requests.post("https://api-ssl.bitly.com/v4/shorten",
+                                 headers={"Authorization": f"Bearer {os.getenv('BITLY_ACCESS_TOKEN')}"},
+                                 json={"long_url": long_url})
+        if response.status_code == 200:
+            return response.json().get("link")
+        return long_url  # Fallback to original URL if shortener fails
+    except Exception:
+        return long_url
 
-# ฟังก์ชันส่งข้อความกลับไปยัง LINE
-
-def reply_to_line(reply_token, message):
+# Function to get Lazada deep link
+def get_lazada_deep_link(keyword):
     headers = {
         "Content-Type": "application/json",
-        "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}"
+        "Authorization": f"Bearer {LAZADA_USER_TOKEN}"
     }
-    payload = {
-        "replyToken": reply_token,
-        "messages": [{"type": "text", "text": message}]
+    params = {
+        "q": keyword,
+        "app_key": LAZADA_APP_KEY,
+        "sign_method": "sha256"
     }
-    response = requests.post(LINE_REPLY_URL, headers=headers, data=json.dumps(payload))
-    return response.status_code
-
-# LINE Webhook
+    response = requests.get(LAZADA_SEARCH_URL.format(LAZADA_APP_KEY), headers=headers, params=params)
+    if response.status_code == 200:
+        items = response.json().get("data", {}).get("items", [])
+        if items:
+            product_url = items[0]["url"]
+            return shorten_url(product_url)
+    return "https://www.lazada.co.th/catalog/?q={}&sub_aff_id={}".format(keyword, LAZADA_AFFILIATE_ID)
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.json
-    if "events" not in data or not data["events"]:
-        return jsonify({"error": "Invalid request"}), 400
+    user_message = data.get("message", "").strip()
     
-    event = data["events"][0]
-    user_message = event.get("message", {}).get("text", "")
-    reply_token = event.get("replyToken", "")
+    shopee_link = shorten_url(SHOPEE_SEARCH_URL.format(user_message))
+    lazada_link = get_lazada_deep_link(user_message)
     
-    if not user_message or not reply_token:
-        return jsonify({"error": "No message received"}), 400
-    
-    # สร้างลิงก์สินค้า
-    shopee_link, lazada_link = generate_affiliate_links(user_message)
-    
-    ai_reply = (
+    response_message = (
         f"🔎 ค้นหาสินค้าเกี่ยวกับ: {user_message}\n\n"
         f"🛒 Shopee: \n➡️ {shopee_link}\n\n"
         f"🛍 Lazada: \n➡️ {lazada_link}\n\n"
         f"📢 🔥 โปรโมชั่นมาแรง! รีบสั่งซื้อตอนนี้ก่อนสินค้าหมด 🔥"
     )
     
-    # ส่งข้อความตอบกลับไปยัง LINE
-    status = reply_to_line(reply_token, ai_reply)
-    
-    return jsonify({"status": status, "reply": ai_reply})
+    return jsonify({"reply": response_message})
 
 if __name__ == "__main__":
-    app.run(port=5000)
+    app.run(debug=True)
