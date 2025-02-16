@@ -1,6 +1,8 @@
 import os
 import json
 import requests
+import time  # ✅ แก้ไข - เพิ่มการ import time
+import hashlib  # ✅ แก้ไข - เพิ่มการ import hashlib
 from flask import Flask, request, jsonify
 
 app = Flask(__name__)
@@ -23,7 +25,7 @@ def generate_lazada_link(keyword):
     params = {
         "app_key": LAZADA_AFFILIATE_APP_KEY,
         "sign_method": "sha256",
-        "timestamp": str(int(time.time() * 1000)),
+        "timestamp": str(int(time.time() * 1000)),  # ✅ ใช้ time อย่างถูกต้อง
         "keyword": keyword,
         "user_token": LAZADA_AFFILIATE_USER_TOKEN
     }
