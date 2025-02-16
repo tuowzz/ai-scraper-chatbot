@@ -14,13 +14,25 @@ SHOPEE_AFFILIATE_ID = os.getenv("SHOPEE_AFFILIATE_ID")
 LAZADA_AFFILIATE_ID = os.getenv("LAZADA_AFFILIATE_ID")
 BITLY_ACCESS_TOKEN = os.getenv("BITLY_ACCESS_TOKEN")
 
-# Shopee Affiliate Link
-def generate_shopee_link(keyword):
+# ค้นหาสินค้า Shopee โดยตรง
+def generate_shopee_product_link(keyword):
+    search_url = f"https://shopee.co.th/api/v4/search/search_items?keyword={keyword}"
+    headers = {"User-Agent": "Mozilla/5.0"}
+    response = requests.get(search_url, headers=headers)
+    
+    if response.status_code == 200:
+        data = response.json()
+        if "items" in data and len(data["items"]) > 0:
+            item = data["items"][0]
+            shop_id = item["shopid"]
+            item_id = item["itemid"]
+            return f"https://shopee.co.th/product/{shop_id}/{item_id}?af_id={SHOPEE_AFFILIATE_ID}"
     return f"https://shopee.co.th/search?keyword={keyword}&af_id={SHOPEE_AFFILIATE_ID}"
 
-# Lazada Search URL (แทน API)
-def generate_lazada_link(keyword):
-    return f"https://www.lazada.co.th/catalog/?q={keyword}&sub_aff_id={LAZADA_AFFILIATE_ID}"
+# ค้นหาสินค้า Lazada โดยตรง
+def generate_lazada_product_link(keyword):
+    search_url = f"https://www.lazada.co.th/catalog/?q={keyword}&sub_aff_id={LAZADA_AFFILIATE_ID}"
+    return search_url
 
 # ย่อลิงก์ด้วย Bitly API
 def shorten_link(url):
@@ -47,8 +59,8 @@ def webhook():
             text = event["message"]["text"]
             reply_token = event["replyToken"]
             
-            shopee_link = generate_shopee_link(text)
-            lazada_link = generate_lazada_link(text)
+            shopee_link = generate_shopee_product_link(text)
+            lazada_link = generate_lazada_product_link(text)
             
             # ย่อลิงก์ถ้าใช้ Bitly
             shopee_link = shorten_link(shopee_link)
