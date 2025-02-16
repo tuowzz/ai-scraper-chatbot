@@ -8,23 +8,37 @@ app = Flask(__name__)
 # Load environment variables
 LINE_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 SHOPEE_AFFILIATE_ID = os.getenv("SHOPEE_AFFILIATE_ID")
-LAZADA_AFFILIATE_ID = os.getenv("LAZADA_AFFILIATE_ID")
-TIKTOK_AFFILIATE_ID = os.getenv("TIKTOK_AFFILIATE_ID")
+LAZADA_AFFILIATE_APP_KEY = os.getenv("LAZADA_AFFILIATE_APP_KEY")
+LAZADA_AFFILIATE_SECRET = os.getenv("LAZADA_AFFILIATE_SECRET")
+LAZADA_AFFILIATE_USER_TOKEN = os.getenv("LAZADA_AFFILIATE_USER_TOKEN")
 
-# Shopee Affiliate Link (Shortened)
+# Shopee Affiliate Link (Full Link)
 def generate_shopee_link(keyword):
-    base_url = "https://s.shopee.co.th"
-    return f"{base_url}/{SHOPEE_AFFILIATE_ID}?keyword={keyword}"
+    base_url = "https://shopee.co.th/search"
+    return f"{base_url}?keyword={keyword}&af_id={SHOPEE_AFFILIATE_ID}"
 
-# Lazada Affiliate Link
+# Lazada API Call for Affiliate Link
 def generate_lazada_link(keyword):
-    base_url = "https://www.lazada.co.th/catalog/"
-    return f"{base_url}?q={keyword}&sub_aff_id={LAZADA_AFFILIATE_ID}"
+    lazada_api_url = "https://api.lazada.com/rest"
+    params = {
+        "app_key": LAZADA_AFFILIATE_APP_KEY,
+        "sign_method": "sha256",
+        "timestamp": str(int(time.time() * 1000)),
+        "keyword": keyword,
+        "user_token": LAZADA_AFFILIATE_USER_TOKEN
+    }
+    
+    # Generate Signature
+    sorted_params = sorted(params.items())
+    sign_string = LAZADA_AFFILIATE_SECRET + "".join(f"{k}{v}" for k, v in sorted_params) + LAZADA_AFFILIATE_SECRET
+    params["sign"] = hashlib.sha256(sign_string.encode()).hexdigest()
 
-# TikTok Affiliate Link (Correct Format)
-def generate_tiktok_link(keyword):
-    base_url = "https://www.tiktok.com/search"
-    return f"{base_url}?q={keyword}&af_id={TIKTOK_AFFILIATE_ID}"
+    response = requests.get(lazada_api_url, params=params)
+    if response.status_code == 200:
+        data = response.json()
+        if "data" in data and "product_url" in data["data"]:
+            return data["data"]["product_url"]
+    return "https://www.lazada.co.th/"
 
 # Process LINE Messages
 @app.route("/webhook", methods=["POST"])
@@ -41,17 +55,15 @@ def webhook():
             text = event["message"]["text"].strip()
             reply_token = event["replyToken"]
 
-            # Generate Links
+            # Generate Affiliate Links
             shopee_link = generate_shopee_link(text)
             lazada_link = generate_lazada_link(text)
-            tiktok_link = generate_tiktok_link(text)
 
-            # Construct Response
+            # Construct Response Message
             response_text = (
                 f"🔎 ค้นหาสินค้าเกี่ยวกับ: {text}\n\n"
                 f"🛒 Shopee: \n➡️ {shopee_link}\n\n"
                 f"🛍 Lazada: \n➡️ {lazada_link}\n\n"
-                f"🎵 TikTok Shop: \n➡️ {tiktok_link}\n\n"
                 f"🔥 โปรโมชั่นมาแรง! รีบสั่งซื้อตอนนี้ก่อนสินค้าหมด 🔥"
             )
 
