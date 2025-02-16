@@ -5,21 +5,34 @@ from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-# Load environment variables
+# โหลดตัวแปรจาก Environment
 LINE_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 SHOPEE_AFFILIATE_ID = os.getenv("SHOPEE_AFFILIATE_ID")
 LAZADA_AFFILIATE_ID = os.getenv("LAZADA_AFFILIATE_ID")
-BITLY_ACCESS_TOKEN = os.getenv("BITLY_ACCESS_TOKEN")
 
-# Shopee Flash Sale Link (ไม่ใช้ API)
-def generate_shopee_flashsale_link():
-    return f"https://shopee.co.th/m/flash_sale?af_id={SHOPEE_AFFILIATE_ID}"
+# โหลดข้อมูลสินค้า
+with open("products.json", "r", encoding="utf-8") as f:
+    product_data = json.load(f)
 
-# Lazada Flash Sale Link (ไม่ใช้ API)
-def generate_lazada_flashsale_link():
-    return f"https://www.lazada.co.th/deals/?sub_aff_id={LAZADA_AFFILIATE_ID}"
+# ฟังก์ชันสร้างลิงก์ Shopee
+def generate_shopee_link(keyword):
+    if keyword in product_data:
+        seller_id = product_data[keyword]["shopee"]["seller_id"]
+        product_id = product_data[keyword]["shopee"]["product_id"]
+        return f"https://shopee.co.th/product/{seller_id}/{product_id}?af_id={SHOPEE_AFFILIATE_ID}"
+    else:
+        return f"https://shopee.co.th/search?keyword={keyword}&af_id={SHOPEE_AFFILIATE_ID}"
 
-# LINE Webhook
+# ฟังก์ชันสร้างลิงก์ Lazada
+def generate_lazada_link(keyword):
+    if keyword in product_data:
+        product_id = product_data[keyword]["lazada"]["product_id"]
+        product_name = product_data[keyword]["lazada"]["name"]
+        return f"https://www.lazada.co.th/products/{product_name}-{product_id}.html?sub_aff_id={LAZADA_AFFILIATE_ID}"
+    else:
+        return f"https://www.lazada.co.th/catalog/?q={keyword}&sub_aff_id={LAZADA_AFFILIATE_ID}"
+
+# Webhook สำหรับ LINE Bot
 @app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.get_json()
@@ -31,18 +44,19 @@ def webhook():
             text = event["message"]["text"]
             reply_token = event["replyToken"]
             
-            shopee_link = generate_shopee_flashsale_link()
-            lazada_link = generate_lazada_flashsale_link()
+            shopee_link = generate_shopee_link(text)
+            lazada_link = generate_lazada_link(text)
             
-            response_text = (f"🔎 ค้นหาสินค้า Flash Sale ตอนนี้! \n\n"
-                             f"🛒 Shopee Flash Sale: \n➡️ {shopee_link}\n\n"
-                             f"🛍 Lazada Flash Sale: \n➡️ {lazada_link}\n\n"
+            response_text = (f"🔎 ค้นหาสินค้าเกี่ยวกับ: {text}\n\n"
+                             f"🛒 Shopee: \n➡️ {shopee_link}\n\n"
+                             f"🛍 Lazada: \n➡️ {lazada_link}\n\n"
                              f"🔥 โปรโมชั่นมาแรง! รีบสั่งซื้อตอนนี้ก่อนสินค้าหมด 🔥")
             
             send_line_message(reply_token, response_text)
+    
     return jsonify({"status": "ok"})
 
-# Send Message to LINE
+# ฟังก์ชันส่งข้อความกลับ LINE
 def send_line_message(reply_token, text):
     url = "https://api.line.me/v2/bot/message/reply"
     headers = {
