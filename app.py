@@ -1,57 +1,69 @@
 import os
 import json
 import requests
-from flask import Flask, request, jsonify
-from urllib.parse import quote
-from bs4 import BeautifulSoup
+import time
+import hmac
+import hashlib
+import random
 import re
+from flask import Flask, request, jsonify
+from bs4 import BeautifulSoup
 
 app = Flask(__name__)
 
-# โหลด Environment Variables
+# Load Environment Variables
 LINE_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 SHOPEE_AFFILIATE_ID = os.getenv("SHOPEE_AFFILIATE_ID")
 LAZADA_AFFILIATE_ID = os.getenv("LAZADA_AFFILIATE_ID")
+LAZADA_APP_KEY = os.getenv("LAZADA_APP_KEY")
+LAZADA_APP_SECRET = os.getenv("LAZADA_APP_SECRET")
+LAZADA_USER_TOKEN = os.getenv("LAZADA_USER_TOKEN")
 
-# ✅ ค้นหาสินค้าขายดีที่สุดใน Shopee
-def get_best_selling_shopee_product(keyword):
-    search_url = f"https://shopee.co.th/search?keyword={quote(keyword)}"
+# ✅ 1️⃣ Shopee: Web Scraping หาสินค้าที่ขายดีที่สุด
+def get_shopee_best_selling_product(keyword):
+    search_url = f"https://shopee.co.th/search?keyword={keyword}"
     headers = {"User-Agent": "Mozilla/5.0"}
-
     response = requests.get(search_url, headers=headers)
     soup = BeautifulSoup(response.text, "html.parser")
 
-    products = []
+    product_links = []
     for a_tag in soup.find_all("a", href=True):
-        match = re.search(r"/product/(\d+)/(\d+)", a_tag["href"])
-        if match:
-            seller_id, product_id = match.groups()
-            products.append({
-                "link": f"https://shopee.co.th/product/{seller_id}/{product_id}?af_id={SHOPEE_AFFILIATE_ID}",
-                "sold": int(a_tag.get_text(strip=True).replace("ขายแล้ว", "").replace("พัน", "000").replace("+", ""))
-            })
+        if re.search(r"/product/\d+/\d+", a_tag["href"]):
+            product_links.append("https://shopee.co.th" + a_tag["href"])
 
-    if products:
-        best_product = max(products, key=lambda x: x["sold"])
-        return best_product["link"]
-    return search_url  # ถ้าไม่มีสินค้า ส่งลิงก์ค้นหาแทน
+    return random.choice(product_links) if product_links else search_url
 
-# ✅ ค้นหาสินค้าขายดีที่สุดใน Lazada
-def get_best_selling_lazada_product(keyword):
-    search_url = f"https://www.lazada.co.th/catalog/?q={quote(keyword)}&sub_aff_id={LAZADA_AFFILIATE_ID}"
-    headers = {"User-Agent": "Mozilla/5.0"}
+# ✅ 2️⃣ Lazada: ใช้ API หาสินค้าที่ขายดีที่สุด
+def get_lazada_best_selling_product(keyword):
+    if not all([LAZADA_APP_KEY, LAZADA_APP_SECRET, LAZADA_USER_TOKEN]):
+        return "❌ ไม่สามารถสร้างลิงก์ Lazada ได้"
 
-    response = requests.get(search_url, headers=headers)
-    soup = BeautifulSoup(response.text, "html.parser")
+    url = "https://api.lazada.co.th/rest"
+    timestamp = int(time.time() * 1000)
+    params = {
+        "app_key": LAZADA_APP_KEY,
+        "sign_method": "sha256",
+        "timestamp": timestamp,
+        "method": "GET",
+        "access_token": LAZADA_USER_TOKEN,
+        "keyword": keyword,
+        "sort_by": "sales_volume"  # จัดเรียงตามยอดขายสูงสุด
+    }
 
-    products = []
-    for a_tag in soup.find_all("a", href=True):
-        if re.search(r"/products/.*?-\d+.html", a_tag["href"]):
-            products.append("https:" + a_tag["href"])
+    # สร้าง Signature
+    sign_string = "&".join([f"{k}={params[k]}" for k in sorted(params)]) + LAZADA_APP_SECRET
+    params["sign"] = hmac.new(LAZADA_APP_SECRET.encode("utf-8"), sign_string.encode("utf-8"), hashlib.sha256).hexdigest()
 
-    return products[0] if products else search_url  # ถ้าไม่มีสินค้า ส่งลิงก์ค้นหาแทน
+    response = requests.get(url, params=params)
+    data = response.json()
 
-# 📌 Webhook LINE Bot
+    if "products" in data and len(data["products"]) > 0:
+        best_product = data["products"][0]  # เลือกสินค้าที่ขายดีที่สุด
+        return f"https://www.lazada.co.th/products/{best_product['product_id']}.html"
+    else:
+        return f"https://www.lazada.co.th/catalog/?q={keyword}"
+
+# ✅ 3️⃣ Webhook สำหรับรับข้อความจาก LINE
 @app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.get_json()
@@ -63,18 +75,18 @@ def webhook():
             text = event["message"]["text"]
             reply_token = event["replyToken"]
 
-            shopee_link = get_best_selling_shopee_product(text)
-            lazada_link = get_best_selling_lazada_product(text)
+            shopee_link = get_shopee_best_selling_product(text)
+            lazada_link = get_lazada_best_selling_product(text)
 
             response_text = (f"🔎 ค้นหาสินค้าเกี่ยวกับ: {text}\n\n"
-                             f"🛒 Shopee (ขายดีที่สุด): \n➡️ {shopee_link}\n\n"
-                             f"🛍 Lazada (ขายดีที่สุด): \n➡️ {lazada_link}\n\n"
+                             f"🛒 Shopee: \n➡️ {shopee_link}\n\n"
+                             f"🛍 Lazada: \n➡️ {lazada_link}\n\n"
                              f"🔥 โปรโมชั่นมาแรง! รีบสั่งซื้อตอนนี้ก่อนสินค้าหมด 🔥")
 
             send_line_message(reply_token, response_text)
     return jsonify({"status": "ok"})
 
-# 📌 ส่งข้อความกลับไปยัง LINE
+# ✅ 4️⃣ ส่งข้อความกลับไปยัง LINE
 def send_line_message(reply_token, text):
     url = "https://api.line.me/v2/bot/message/reply"
     headers = {
