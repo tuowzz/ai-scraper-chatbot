@@ -8,46 +8,17 @@ from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-# ✅ โหลด API Keys
+# ✅ โหลด API Keys (ดึงค่าจาก Environment Variables)
 LAZADA_APP_KEY = os.getenv("LAZADA_APP_KEY")
 LAZADA_APP_SECRET = os.getenv("LAZADA_APP_SECRET")
 LAZADA_USER_TOKEN = os.getenv("LAZADA_USER_TOKEN")
-LAZADA_REFRESH_TOKEN = os.getenv("LAZADA_REFRESH_TOKEN")  # เพิ่ม Refresh Token
 LAZADA_AFFILIATE_ID = os.getenv("LAZADA_AFFILIATE_ID")
 
-# ✅ ฟังก์ชันอัปเดต Access Token อัตโนมัติ
-def refresh_access_token():
-    global LAZADA_USER_TOKEN, LAZADA_REFRESH_TOKEN
-    url = "https://auth.lazada.com/rest"
-    
-    params = {
-        "app_key": LAZADA_APP_KEY,
-        "timestamp": str(int(time.time() * 1000)),
-        "sign_method": "sha256",
-        "method": "accessToken.refresh",
-        "refresh_token": LAZADA_REFRESH_TOKEN
-    }
+# ✅ ตรวจสอบว่าทุกค่ามีอยู่ ถ้าไม่มีให้แสดง Error
+if not all([LAZADA_APP_KEY, LAZADA_APP_SECRET, LAZADA_USER_TOKEN, LAZADA_AFFILIATE_ID]):
+    raise ValueError("❌ Missing Lazada API Keys. กรุณาตรวจสอบ Environment Variables")
 
-    # 🔹 สร้าง Signature
-    sorted_params = sorted(params.items(), key=lambda x: x[0])
-    base_string = "&".join(f"{k}={urllib.parse.quote(str(v))}" for k, v in sorted_params)
-    signature = hmac.new(
-        LAZADA_APP_SECRET.encode(), base_string.encode(), hashlib.sha256
-    ).hexdigest().upper()
-
-    params["sign"] = signature
-    response = requests.post(url, params=params).json()
-
-    if "access_token" in response:
-        LAZADA_USER_TOKEN = response["access_token"]
-        LAZADA_REFRESH_TOKEN = response["refresh_token"]
-        os.environ["LAZADA_USER_TOKEN"] = LAZADA_USER_TOKEN
-        os.environ["LAZADA_REFRESH_TOKEN"] = LAZADA_REFRESH_TOKEN
-        print("✅ Access Token อัปเดตเรียบร้อย!")
-    else:
-        print("❌ ไม่สามารถอัปเดต Access Token ได้", response)
-
-# ✅ ฟังก์ชันค้นหาสินค้าที่ขายดีที่สุด
+# ✅ ฟังก์ชันค้นหาสินค้าที่ขายดีที่สุดใน Lazada
 def get_best_selling_lazada(keyword):
     params = {
         "app_key": LAZADA_APP_KEY,
@@ -61,7 +32,7 @@ def get_best_selling_lazada(keyword):
         "sort_by": "sales_volume"
     }
 
-    # 🔹 สร้าง Signature
+    # 🔹 สร้าง Signature สำหรับ API
     sorted_params = sorted(params.items(), key=lambda x: x[0])
     base_string = "&".join(f"{k}={urllib.parse.quote(str(v))}" for k, v in sorted_params)
     signature = hmac.new(
@@ -80,7 +51,7 @@ def get_best_selling_lazada(keyword):
     
     return None, None
 
-# ✅ ฟังก์ชันสร้างลิงก์ Affiliate
+# ✅ ฟังก์ชันสร้างลิงก์ Affiliate จาก Lazada API
 def generate_lazada_affiliate_link(product_id):
     params = {
         "app_key": LAZADA_APP_KEY,
@@ -111,31 +82,26 @@ def generate_lazada_affiliate_link(product_id):
     
     return None
 
-# ✅ Webhook API
-@app.route("/search_lazada", methods=["POST"])
-def search_lazada():
+# ✅ Webhook API ที่รับคำค้นหาและสร้างลิงก์ Lazada
+@app.route("/webhook", methods=["POST"])
+def webhook():
     data = request.get_json()
     keyword = data.get("keyword")
 
     if not keyword:
-        return jsonify({"error": "กรุณาระบุคำค้นหา"}), 400
+        return jsonify({"error": "❌ กรุณาระบุคำค้นหา"}), 400
 
-    # ✅ ตรวจสอบ Access Token
-    if not LAZADA_USER_TOKEN:
-        print("🔄 กำลังอัปเดต Access Token...")
-        refresh_access_token()
-
-    # ✅ ค้นหาสินค้าที่ขายดีที่สุด
+    # ✅ ค้นหาสินค้ายอดนิยม
     product_id, product_name = get_best_selling_lazada(keyword)
 
     if not product_id:
-        return jsonify({"error": "ไม่พบสินค้าที่ตรงกับคำค้นหา"}), 404
+        return jsonify({"error": "❌ ไม่พบสินค้าที่ตรงกับคำค้นหา"}), 404
 
-    # ✅ สร้างลิงก์ Affiliate
+    # ✅ สร้างลิงก์ Lazada Affiliate
     lazada_link = generate_lazada_affiliate_link(product_id)
 
     if not lazada_link:
-        return jsonify({"error": "ไม่สามารถสร้างลิงก์ Affiliate ได้"}), 500
+        return jsonify({"error": "❌ ไม่สามารถสร้างลิงก์ Affiliate ได้"}), 500
 
     return jsonify({
         "keyword": keyword,
@@ -143,5 +109,7 @@ def search_lazada():
         "affiliate_link": lazada_link
     })
 
+# ✅ ให้ Flask ใช้พอร์ตที่ถูกต้อง
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
