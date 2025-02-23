@@ -14,44 +14,41 @@ LAZADA_APP_SECRET = os.getenv("LAZADA_APP_SECRET")
 LAZADA_USER_TOKEN = os.getenv("LAZADA_USER_TOKEN")
 LAZADA_AFFILIATE_ID = os.getenv("LAZADA_AFFILIATE_ID")
 
-# ✅ ตรวจสอบว่า API Keys ครบหรือไม่
-if not all([LAZADA_APP_KEY, LAZADA_APP_SECRET, LAZADA_USER_TOKEN, LAZADA_AFFILIATE_ID]):
-    raise ValueError("❌ Missing Lazada API Keys. ตรวจสอบ Environment Variables")
-
 # ✅ ฟังก์ชัน Debug Log
 def debug_log(message):
     print(f"🛠 DEBUG: {message}")
 
-# ✅ ฟังก์ชันค้นหาสินค้าที่ขายดีที่สุดใน Lazada
+# ✅ ฟังก์ชันสร้าง Signature สำหรับ Lazada API
+def generate_signature(params):
+    sorted_params = sorted(params.items(), key=lambda x: x[0])
+    base_string = "&".join(f"{k}={urllib.parse.quote(str(v))}" for k, v in sorted_params)
+    signature = hmac.new(
+        LAZADA_APP_SECRET.encode(), base_string.encode(), hashlib.sha256
+    ).hexdigest().upper()
+    return signature
+
+# ✅ ฟังก์ชันค้นหาสินค้า Lazada
 def get_best_selling_lazada(keyword):
     params = {
         "app_key": LAZADA_APP_KEY,
         "timestamp": str(int(time.time() * 1000)),
         "sign_method": "sha256",
         "access_token": LAZADA_USER_TOKEN,
-        "method": "lazada.product.search",
+        "method": "lazada.seller.product.get",
         "format": "JSON",
         "v": "1.0",
-        "q": keyword,
-        "sort_by": "sales_volume"
+        "search": keyword
     }
 
-    sorted_params = sorted(params.items(), key=lambda x: x[0])
-    base_string = "&".join(f"{k}={urllib.parse.quote(str(v))}" for k, v in sorted_params)
-    signature = hmac.new(
-        LAZADA_APP_SECRET.encode(), base_string.encode(), hashlib.sha256
-    ).hexdigest().upper()
-
-    params["sign"] = signature
+    params["sign"] = generate_signature(params)
     url = "https://api.lazada.co.th/rest?" + "&".join(f"{k}={v}" for k, v in params.items())
 
     response = requests.get(url).json()
-
     debug_log(f"Lazada Search Response: {response}")
 
     if "data" in response and "products" in response["data"]:
-        best_product = response["data"]["products"][0]
-        product_id = best_product["product_id"]
+        best_product = sorted(response["data"]["products"], key=lambda x: x["sales"], reverse=True)[0]
+        product_id = best_product["item_id"]
         return product_id, best_product["name"]
 
     return None, None
@@ -63,24 +60,17 @@ def generate_lazada_affiliate_link(product_id):
         "timestamp": str(int(time.time() * 1000)),
         "sign_method": "sha256",
         "access_token": LAZADA_USER_TOKEN,
-        "method": "lazada.generate.afflink",
+        "method": "lazada.affiliate.generateLink",
         "format": "JSON",
         "v": "1.0",
         "tracking_id": LAZADA_AFFILIATE_ID,
         "url": f"https://www.lazada.co.th/products/{product_id}.html"
     }
 
-    sorted_params = sorted(params.items(), key=lambda x: x[0])
-    base_string = "&".join(f"{k}={urllib.parse.quote(str(v))}" for k, v in sorted_params)
-    signature = hmac.new(
-        LAZADA_APP_SECRET.encode(), base_string.encode(), hashlib.sha256
-    ).hexdigest().upper()
-
-    params["sign"] = signature
+    params["sign"] = generate_signature(params)
     url = "https://api.lazada.co.th/rest?" + "&".join(f"{k}={v}" for k, v in params.items())
 
     response = requests.get(url).json()
-
     debug_log(f"Lazada Affiliate Response: {response}")
 
     if "data" in response and "aff_link" in response["data"]:
