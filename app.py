@@ -8,15 +8,19 @@ from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-# ✅ โหลด API Keys (ดึงค่าจาก Environment Variables)
+# ✅ โหลด API Keys
 LAZADA_APP_KEY = os.getenv("LAZADA_APP_KEY")
 LAZADA_APP_SECRET = os.getenv("LAZADA_APP_SECRET")
 LAZADA_USER_TOKEN = os.getenv("LAZADA_USER_TOKEN")
 LAZADA_AFFILIATE_ID = os.getenv("LAZADA_AFFILIATE_ID")
 
-# ✅ ตรวจสอบว่าทุกค่ามีอยู่ ถ้าไม่มีให้แสดง Error
+# ✅ ตรวจสอบว่า API Keys ครบหรือไม่
 if not all([LAZADA_APP_KEY, LAZADA_APP_SECRET, LAZADA_USER_TOKEN, LAZADA_AFFILIATE_ID]):
-    raise ValueError("❌ Missing Lazada API Keys. กรุณาตรวจสอบ Environment Variables")
+    raise ValueError("❌ Missing Lazada API Keys. ตรวจสอบ Environment Variables")
+
+# ✅ ฟังก์ชัน Debug Log
+def debug_log(message):
+    print(f"🛠 DEBUG: {message}")
 
 # ✅ ฟังก์ชันค้นหาสินค้าที่ขายดีที่สุดใน Lazada
 def get_best_selling_lazada(keyword):
@@ -32,7 +36,6 @@ def get_best_selling_lazada(keyword):
         "sort_by": "sales_volume"
     }
 
-    # 🔹 สร้าง Signature สำหรับ API
     sorted_params = sorted(params.items(), key=lambda x: x[0])
     base_string = "&".join(f"{k}={urllib.parse.quote(str(v))}" for k, v in sorted_params)
     signature = hmac.new(
@@ -43,15 +46,17 @@ def get_best_selling_lazada(keyword):
     url = "https://api.lazada.co.th/rest?" + "&".join(f"{k}={v}" for k, v in params.items())
 
     response = requests.get(url).json()
-    
+
+    debug_log(f"Lazada Search Response: {response}")
+
     if "data" in response and "products" in response["data"]:
-        best_product = response["data"]["products"][0]  # ✅ ดึงสินค้าที่ขายดีที่สุด
+        best_product = response["data"]["products"][0]
         product_id = best_product["product_id"]
         return product_id, best_product["name"]
-    
+
     return None, None
 
-# ✅ ฟังก์ชันสร้างลิงก์ Affiliate จาก Lazada API
+# ✅ ฟังก์ชันสร้างลิงก์ Affiliate
 def generate_lazada_affiliate_link(product_id):
     params = {
         "app_key": LAZADA_APP_KEY,
@@ -65,7 +70,6 @@ def generate_lazada_affiliate_link(product_id):
         "url": f"https://www.lazada.co.th/products/{product_id}.html"
     }
 
-    # 🔹 สร้าง Signature
     sorted_params = sorted(params.items(), key=lambda x: x[0])
     base_string = "&".join(f"{k}={urllib.parse.quote(str(v))}" for k, v in sorted_params)
     signature = hmac.new(
@@ -76,40 +80,51 @@ def generate_lazada_affiliate_link(product_id):
     url = "https://api.lazada.co.th/rest?" + "&".join(f"{k}={v}" for k, v in params.items())
 
     response = requests.get(url).json()
-    
+
+    debug_log(f"Lazada Affiliate Response: {response}")
+
     if "data" in response and "aff_link" in response["data"]:
         return response["data"]["aff_link"]
-    
+
     return None
 
 # ✅ Webhook API ที่รับคำค้นหาและสร้างลิงก์ Lazada
 @app.route("/webhook", methods=["POST"])
 def webhook():
-    data = request.get_json()
-    keyword = data.get("keyword")
+    try:
+        data = request.get_json()
+        debug_log(f"Received Data: {data}")
 
-    if not keyword:
-        return jsonify({"error": "❌ กรุณาระบุคำค้นหา"}), 400
+        if not data:
+            return jsonify({"error": "❌ ไม่มีข้อมูลที่ส่งมา"}), 400
 
-    # ✅ ค้นหาสินค้ายอดนิยม
-    product_id, product_name = get_best_selling_lazada(keyword)
+        keyword = data.get("keyword", "default_keyword")
 
-    if not product_id:
-        return jsonify({"error": "❌ ไม่พบสินค้าที่ตรงกับคำค้นหา"}), 404
+        if not keyword:
+            return jsonify({"error": "❌ กรุณาระบุคำค้นหา"}), 400
 
-    # ✅ สร้างลิงก์ Lazada Affiliate
-    lazada_link = generate_lazada_affiliate_link(product_id)
+        product_id, product_name = get_best_selling_lazada(keyword)
 
-    if not lazada_link:
-        return jsonify({"error": "❌ ไม่สามารถสร้างลิงก์ Affiliate ได้"}), 500
+        if not product_id:
+            return jsonify({"error": "❌ ไม่พบสินค้าที่ตรงกับคำค้นหา"}), 404
 
-    return jsonify({
-        "keyword": keyword,
-        "product_name": product_name,
-        "affiliate_link": lazada_link
-    })
+        lazada_link = generate_lazada_affiliate_link(product_id)
+
+        if not lazada_link:
+            return jsonify({"error": "❌ ไม่สามารถสร้างลิงก์ Affiliate ได้"}), 500
+
+        return jsonify({
+            "keyword": keyword,
+            "product_name": product_name,
+            "affiliate_link": lazada_link
+        })
+
+    except Exception as e:
+        debug_log(f"❌ Error: {str(e)}")
+        return jsonify({"error": f"❌ Internal Server Error: {str(e)}"}), 500
 
 # ✅ ให้ Flask ใช้พอร์ตที่ถูกต้อง
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
+    debug_log(f"✅ Starting Flask on port {port}...")
     app.run(host="0.0.0.0", port=port)
