@@ -27,17 +27,18 @@ def generate_signature(params):
     ).hexdigest().upper()
     return signature
 
-# ✅ ฟังก์ชันค้นหาสินค้า Lazada
+# ✅ ฟังก์ชันค้นหาสินค้าขายดีบน Lazada
 def get_best_selling_lazada(keyword):
     params = {
         "app_key": LAZADA_APP_KEY,
         "timestamp": str(int(time.time() * 1000)),
         "sign_method": "sha256",
         "access_token": LAZADA_USER_TOKEN,
-        "method": "lazada.seller.product.get",
+        "method": "lazada.products.get",
         "format": "JSON",
         "v": "1.0",
-        "search": keyword
+        "search": keyword,
+        "sort_by": "sales_volume"  # 🔥 เรียงลำดับตามยอดขายสูงสุด
     }
 
     params["sign"] = generate_signature(params)
@@ -48,23 +49,24 @@ def get_best_selling_lazada(keyword):
 
     if "data" in response and "products" in response["data"]:
         best_product = sorted(response["data"]["products"], key=lambda x: x["sales"], reverse=True)[0]
-        product_id = best_product["item_id"]
-        return product_id, best_product["name"]
+        product_url = best_product["url"]
+        product_name = best_product["name"]
+        return product_url, product_name
 
     return None, None
 
-# ✅ ฟังก์ชันสร้างลิงก์ Affiliate
-def generate_lazada_affiliate_link(product_id):
+# ✅ ฟังก์ชันสร้างลิงก์ Affiliate สำหรับ Lazada
+def generate_lazada_affiliate_link(product_url):
     params = {
         "app_key": LAZADA_APP_KEY,
         "timestamp": str(int(time.time() * 1000)),
         "sign_method": "sha256",
         "access_token": LAZADA_USER_TOKEN,
-        "method": "lazada.affiliate.generateLink",
+        "method": "lazada.affiliate.link.generate",
         "format": "JSON",
         "v": "1.0",
         "tracking_id": LAZADA_AFFILIATE_ID,
-        "url": f"https://www.lazada.co.th/products/{product_id}.html"
+        "url": product_url
     }
 
     params["sign"] = generate_signature(params)
@@ -93,12 +95,12 @@ def webhook():
         if not keyword:
             return jsonify({"error": "❌ กรุณาระบุคำค้นหา"}), 400
 
-        product_id, product_name = get_best_selling_lazada(keyword)
+        product_url, product_name = get_best_selling_lazada(keyword)
 
-        if not product_id:
+        if not product_url:
             return jsonify({"error": "❌ ไม่พบสินค้าที่ตรงกับคำค้นหา"}), 404
 
-        lazada_link = generate_lazada_affiliate_link(product_id)
+        lazada_link = generate_lazada_affiliate_link(product_url)
 
         if not lazada_link:
             return jsonify({"error": "❌ ไม่สามารถสร้างลิงก์ Affiliate ได้"}), 500
