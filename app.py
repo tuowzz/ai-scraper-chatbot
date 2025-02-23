@@ -29,12 +29,12 @@ def generate_signature(params):
 
 # ✅ ฟังก์ชันค้นหาสินค้าขายดีบน Lazada
 def get_best_selling_lazada(keyword):
+    endpoint = "https://api.lazada.co.th/rest/products/search"
     params = {
         "app_key": LAZADA_APP_KEY,
         "timestamp": str(int(time.time() * 1000)),
         "sign_method": "sha256",
         "access_token": LAZADA_USER_TOKEN,
-        "method": "lazada.product.search",  # ✅ เปลี่ยนเป็น API ที่ถูกต้อง
         "format": "JSON",
         "v": "1.0",
         "q": keyword,  # ✅ ใช้คำค้นหาที่ส่งมา
@@ -42,9 +42,8 @@ def get_best_selling_lazada(keyword):
     }
 
     params["sign"] = generate_signature(params)
-    url = "https://api.lazada.co.th/rest?" + "&".join(f"{k}={v}" for k, v in params.items())
-
-    response = requests.get(url).json()
+    response = requests.get(endpoint, params=params).json()
+    
     debug_log(f"Lazada Search Response: {response}")
 
     if "data" in response and "products" in response["data"]:
@@ -57,12 +56,12 @@ def get_best_selling_lazada(keyword):
 
 # ✅ ฟังก์ชันสร้างลิงก์ Affiliate สำหรับ Lazada
 def generate_lazada_affiliate_link(product_url):
+    endpoint = "https://api.lazada.co.th/rest/affiliate/link/generate"
     params = {
         "app_key": LAZADA_APP_KEY,
         "timestamp": str(int(time.time() * 1000)),
         "sign_method": "sha256",
         "access_token": LAZADA_USER_TOKEN,
-        "method": "lazada.affiliate.link.generate",
         "format": "JSON",
         "v": "1.0",
         "tracking_id": LAZADA_AFFILIATE_ID,
@@ -70,9 +69,8 @@ def generate_lazada_affiliate_link(product_url):
     }
 
     params["sign"] = generate_signature(params)
-    url = "https://api.lazada.co.th/rest?" + "&".join(f"{k}={v}" for k, v in params.items())
-
-    response = requests.get(url).json()
+    response = requests.get(endpoint, params=params).json()
+    
     debug_log(f"Lazada Affiliate Response: {response}")
 
     if "data" in response and "aff_link" in response["data"]:
