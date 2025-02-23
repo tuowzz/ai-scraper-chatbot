@@ -18,7 +18,7 @@ LAZADA_APP_KEY = os.getenv("LAZADA_APP_KEY")
 LAZADA_APP_SECRET = os.getenv("LAZADA_APP_SECRET")
 LAZADA_USER_TOKEN = os.getenv("LAZADA_USER_TOKEN")
 
-# ✅ ฟังก์ชันดึง "สินค้าขายดีที่สุด" จาก Lazada API และส่งไปที่หน้าสินค้าโดยตรง
+# ✅ ฟังก์ชันดึง "สินค้าขายดีที่สุด" จาก Lazada API และสร้างลิงก์ Affiliate
 def get_best_selling_lazada(keyword):
     params = {
         "app_key": LAZADA_APP_KEY,
@@ -43,11 +43,44 @@ def get_best_selling_lazada(keyword):
     url = "https://api.lazada.co.th/rest?" + "&".join(f"{k}={v}" for k, v in params.items())
 
     response = requests.get(url).json()
+    
     if "data" in response and "products" in response["data"]:
         best_product = response["data"]["products"][0]
-        return f"https://www.lazada.co.th/products/{best_product['product_id']}.html?sub_aff_id={LAZADA_AFFILIATE_ID}"
+        product_id = best_product["product_id"]
+        return product_id, best_product["name"]
     
-    return f"https://www.lazada.co.th/catalog/?q={keyword}&sub_aff_id={LAZADA_AFFILIATE_ID}"
+    return None, None
+
+# ✅ ฟังก์ชันสร้างลิงก์ Affiliate จาก Lazada API
+def generate_lazada_affiliate_link(product_id):
+    params = {
+        "app_key": LAZADA_APP_KEY,
+        "timestamp": str(int(time.time() * 1000)),
+        "sign_method": "sha256",
+        "access_token": LAZADA_USER_TOKEN,
+        "method": "lazada.generate.afflink",
+        "format": "JSON",
+        "v": "1.0",
+        "tracking_id": LAZADA_AFFILIATE_ID,
+        "url": f"https://www.lazada.co.th/products/{product_id}.html"
+    }
+
+    # 🔹 สร้าง Signature
+    sorted_params = sorted(params.items(), key=lambda x: x[0])
+    base_string = "&".join(f"{k}={urllib.parse.quote(str(v))}" for k, v in sorted_params)
+    signature = hmac.new(
+        LAZADA_APP_SECRET.encode(), base_string.encode(), hashlib.sha256
+    ).hexdigest().upper()
+
+    params["sign"] = signature
+    url = "https://api.lazada.co.th/rest?" + "&".join(f"{k}={v}" for k, v in params.items())
+
+    response = requests.get(url).json()
+    
+    if "data" in response and "aff_link" in response["data"]:
+        return response["data"]["aff_link"]
+    
+    return None
 
 # ✅ ฟังก์ชันดึง "สินค้าขายดีที่สุด" จาก Shopee (Web Scraping)
 def get_best_selling_shopee(keyword):
@@ -76,9 +109,14 @@ def webhook():
             text = event["message"]["text"]
             reply_token = event["replyToken"]
 
+            # ✅ ดึงสินค้าขายดีที่สุดจาก Shopee
             shopee_link = get_best_selling_shopee(text)
-            lazada_link = get_best_selling_lazada(text)
 
+            # ✅ ดึงสินค้าขายดีที่สุดจาก Lazada + สร้างลิงก์ Affiliate
+            product_id, product_name = get_best_selling_lazada(text)
+            lazada_link = generate_lazada_affiliate_link(product_id) if product_id else f"https://www.lazada.co.th/catalog/?q={text}&sub_aff_id={LAZADA_AFFILIATE_ID}"
+
+            # ✅ ส่งข้อความตอบกลับ
             response_text = (f"🔎 ค้นหาสินค้าเกี่ยวกับ: {text}\n\n"
                              f"🛒 Shopee: \n➡️ {shopee_link}\n\n"
                              f"🛍 Lazada: \n➡️ {lazada_link}\n\n"
