@@ -8,15 +8,15 @@ from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-# ✅ โหลด API Keys จาก Environment Variables
+# ✅ โหลด Environment Variables
+LINE_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 LAZADA_APP_KEY = os.getenv("LAZADA_APP_KEY")
 LAZADA_APP_SECRET = os.getenv("LAZADA_APP_SECRET")
 LAZADA_USER_TOKEN = os.getenv("LAZADA_USER_TOKEN")
 LAZADA_AFFILIATE_ID = os.getenv("LAZADA_AFFILIATE_ID")
-LINE_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 
 # ✅ ฟังก์ชันสร้าง Signature สำหรับ Lazada API
-def generate_signature(params):
+def create_lazada_signature(params):
     sorted_params = sorted(params.items(), key=lambda x: x[0])
     base_string = "&".join(f"{k}={urllib.parse.quote(str(v))}" for k, v in sorted_params)
     signature = hmac.new(
@@ -24,7 +24,7 @@ def generate_signature(params):
     ).hexdigest().upper()
     return signature
 
-# ✅ ฟังก์ชันค้นหาสินค้าขายดีบน Lazada
+# ✅ ฟังก์ชันค้นหาสินค้าที่ขายดีที่สุดใน Lazada
 def get_best_selling_lazada(keyword):
     params = {
         "app_key": LAZADA_APP_KEY,
@@ -37,20 +37,21 @@ def get_best_selling_lazada(keyword):
         "q": keyword,
         "sort_by": "sales_volume"
     }
-    
-    params["sign"] = generate_signature(params)
+
+    params["sign"] = create_lazada_signature(params)
     url = "https://api.lazada.co.th/rest?" + "&".join(f"{k}={v}" for k, v in params.items())
 
     response = requests.get(url).json()
-    
+    print(f"🔹 Lazada API Response: {response}")  # ✅ Debug Log
+
     if "data" in response and "products" in response["data"]:
         best_product = response["data"]["products"][0]
         product_id = best_product["product_id"]
         return product_id, best_product["name"]
-    
+
     return None, None
 
-# ✅ ฟังก์ชันสร้างลิงก์ Affiliate สำหรับ Lazada
+# ✅ ฟังก์ชันสร้างลิงก์ Affiliate จาก Lazada API
 def generate_lazada_affiliate_link(product_id):
     params = {
         "app_key": LAZADA_APP_KEY,
@@ -64,30 +65,18 @@ def generate_lazada_affiliate_link(product_id):
         "url": f"https://www.lazada.co.th/products/{product_id}.html"
     }
 
-    params["sign"] = generate_signature(params)
+    params["sign"] = create_lazada_signature(params)
     url = "https://api.lazada.co.th/rest?" + "&".join(f"{k}={v}" for k, v in params.items())
 
     response = requests.get(url).json()
-    
+    print(f"🔹 Affiliate Link Response: {response}")  # ✅ Debug Log
+
     if "data" in response and "aff_link" in response["data"]:
         return response["data"]["aff_link"]
-    
+
     return None
 
-# ✅ ฟังก์ชันตอบกลับไปยัง LINE Webhook
-def send_line_message(reply_token, text):
-    url = "https://api.line.me/v2/bot/message/reply"
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {LINE_ACCESS_TOKEN}"
-    }
-    payload = {
-        "replyToken": reply_token,
-        "messages": [{"type": "text", "text": text}]
-    }
-    requests.post(url, headers=headers, json=payload)
-
-# ✅ Webhook API ค้นหาสินค้า & ส่งลิงก์ Lazada
+# ✅ Webhook API สำหรับรับข้อความจาก LINE Bot
 @app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.get_json()
@@ -99,26 +88,40 @@ def webhook():
             text = event["message"]["text"]
             reply_token = event["replyToken"]
 
-            # ✅ ค้นหาสินค้า
+            # ✅ ค้นหาสินค้ายอดนิยมใน Lazada
             product_id, product_name = get_best_selling_lazada(text)
 
             if not product_id:
-                response_text = "❌ ไม่พบสินค้าที่คุณค้นหา"
+                reply_text = "❌ ไม่พบสินค้าตามคำค้นหาของคุณ"
             else:
-                # ✅ สร้างลิงก์ Affiliate
                 lazada_link = generate_lazada_affiliate_link(product_id)
                 if not lazada_link:
-                    response_text = "❌ ไม่สามารถสร้างลิงก์ Lazada ได้"
+                    reply_text = "❌ ไม่สามารถสร้างลิงก์ Affiliate ได้"
                 else:
-                    response_text = (f"🔎 ค้นหาสินค้าเกี่ยวกับ: {text}\n\n"
-                                     f"🛍 Lazada: \n➡️ {lazada_link}\n\n"
-                                     f"🔥 โปรโมชั่นมาแรง! รีบสั่งซื้อตอนนี้ก่อนสินค้าหมด 🔥")
+                    reply_text = (f"🔎 ค้นหาสินค้าเกี่ยวกับ: {text}\n\n"
+                                  f"🛍 {product_name}\n➡️ {lazada_link}\n\n"
+                                  f"🔥 โปรโมชั่นมาแรง! รีบสั่งซื้อตอนนี้ก่อนสินค้าหมด 🔥")
 
-            send_line_message(reply_token, response_text)
-
+            send_line_message(reply_token, reply_text)
+    
     return jsonify({"status": "ok"})
 
-# ✅ เรียกใช้งาน Flask บน Render หรือ Google Cloud
+# ✅ ฟังก์ชันส่งข้อความกลับไปที่ LINE
+def send_line_message(reply_token, text):
+    url = "https://api.line.me/v2/bot/message/reply"
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {LINE_ACCESS_TOKEN}"
+    }
+    payload = {
+        "replyToken": reply_token,
+        "messages": [{"type": "text", "text": text}]
+    }
+
+    response = requests.post(url, headers=headers, json=payload)
+    print(f"🔹 LINE API Response: {response.status_code}, {response.text}")  # ✅ Debug Log
+
+# ✅ Start Flask Server
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
+    port = int(os.environ.get("PORT", 10000))  # ✅ เปลี่ยนเป็น 10000
     app.run(host="0.0.0.0", port=port)
