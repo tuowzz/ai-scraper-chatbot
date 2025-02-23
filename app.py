@@ -18,7 +18,7 @@ LAZADA_APP_KEY = os.getenv("LAZADA_APP_KEY")
 LAZADA_APP_SECRET = os.getenv("LAZADA_APP_SECRET")
 LAZADA_USER_TOKEN = os.getenv("LAZADA_USER_TOKEN")
 
-# ✅ ฟังก์ชันดึงสินค้าขายดีที่สุดจาก Lazada
+# ✅ ฟังก์ชันดึง "สินค้าขายดีที่สุด" จาก Lazada API และส่งไปที่หน้าสินค้าโดยตรง
 def get_best_selling_lazada(keyword):
     params = {
         "app_key": LAZADA_APP_KEY,
@@ -29,9 +29,10 @@ def get_best_selling_lazada(keyword):
         "format": "JSON",
         "v": "1.0",
         "q": keyword,
-        "sort_by": "sales_volume"  # เรียงตามยอดขายสูงสุด
+        "sort_by": "sales_volume"
     }
 
+    # 🔹 สร้าง Signature สำหรับ Lazada API
     sorted_params = sorted(params.items(), key=lambda x: x[0])
     base_string = "&".join(f"{k}={urllib.parse.quote(str(v))}" for k, v in sorted_params)
     signature = hmac.new(
@@ -43,16 +44,16 @@ def get_best_selling_lazada(keyword):
 
     response = requests.get(url).json()
     if "data" in response and "products" in response["data"]:
-        best_product = response["data"]["products"][0]  # ดึงสินค้าที่ขายดีที่สุด
+        best_product = response["data"]["products"][0]
         return f"https://www.lazada.co.th/products/{best_product['product_id']}.html?sub_aff_id={LAZADA_AFFILIATE_ID}"
     
     return f"https://www.lazada.co.th/catalog/?q={keyword}&sub_aff_id={LAZADA_AFFILIATE_ID}"
 
-# ✅ ฟังก์ชันดึงสินค้าขายดีที่สุดจาก Shopee (ใช้ Web Scraping)
+# ✅ ฟังก์ชันดึง "สินค้าขายดีที่สุด" จาก Shopee (Web Scraping)
 def get_best_selling_shopee(keyword):
     search_url = f"https://shopee.co.th/search?keyword={keyword}"
     headers = {"User-Agent": "Mozilla/5.0"}
-    
+
     response = requests.get(search_url, headers=headers)
     soup = BeautifulSoup(response.text, "html.parser")
 
@@ -63,7 +64,7 @@ def get_best_selling_shopee(keyword):
 
     return product_links[0] if product_links else search_url
 
-# ✅ Webhook LINE Bot หรือ Telegram Bot
+# ✅ Webhook สำหรับ LINE Bot หรือ Telegram Bot
 @app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.get_json()
@@ -75,7 +76,6 @@ def webhook():
             text = event["message"]["text"]
             reply_token = event["replyToken"]
 
-            # ดึงสินค้าขายดีที่สุดจาก Shopee และ Lazada
             shopee_link = get_best_selling_shopee(text)
             lazada_link = get_best_selling_lazada(text)
 
@@ -102,4 +102,5 @@ def send_line_message(reply_token, text):
     requests.post(url, headers=headers, json=payload)
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
