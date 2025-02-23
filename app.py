@@ -34,10 +34,10 @@ def get_best_selling_lazada(keyword):
         "timestamp": str(int(time.time() * 1000)),
         "sign_method": "sha256",
         "access_token": LAZADA_USER_TOKEN,
-        "method": "lazada.products.get",
+        "method": "lazada.product.search",  # ✅ เปลี่ยนเป็น API ที่ถูกต้อง
         "format": "JSON",
         "v": "1.0",
-        "search": keyword,
+        "q": keyword,  # ✅ ใช้คำค้นหาที่ส่งมา
         "sort_by": "sales_volume"  # 🔥 เรียงลำดับตามยอดขายสูงสุด
     }
 
