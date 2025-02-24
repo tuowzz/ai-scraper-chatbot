@@ -17,11 +17,9 @@ LAZADA_AFFILIATE_ID = os.getenv("LAZADA_AFFILIATE_ID")
 
 LINE_REPLY_URL = "https://api.line.me/v2/bot/message/reply"
 
-
 # ✅ ฟังก์ชัน Debug Log
 def debug_log(message):
     print(f"🛠 DEBUG: {message}")
-
 
 # ✅ ฟังก์ชันสร้าง Signature สำหรับ Lazada API
 def generate_signature(params):
@@ -32,10 +30,9 @@ def generate_signature(params):
     ).hexdigest().upper()
     return signature
 
-
 # ✅ ฟังก์ชันค้นหาสินค้าขายดีบน Lazada
 def get_best_selling_lazada(keyword):
-    endpoint = "https://api.lazada.co.th/rest/products/search"
+    endpoint = "https://api.lazada.co.th/rest/products/search"  # เปลี่ยนให้ตรงกับ API ใหม่
     params = {
         "app_key": LAZADA_APP_KEY,
         "timestamp": str(int(time.time() * 1000)),
@@ -48,6 +45,8 @@ def get_best_selling_lazada(keyword):
     }
 
     params["sign"] = generate_signature(params)
+    debug_log(f"Request Params: {params}")  # เพิ่ม Debug Log
+
     response = requests.get(endpoint, params=params).json()
     
     debug_log(f"Lazada Search Response: {response}")
@@ -60,10 +59,9 @@ def get_best_selling_lazada(keyword):
 
     return None, None
 
-
 # ✅ ฟังก์ชันสร้างลิงก์ Affiliate สำหรับ Lazada
 def generate_lazada_affiliate_link(product_url):
-    endpoint = "https://api.lazada.co.th/rest/affiliate/link/generate"
+    endpoint = "https://api.lazada.co.th/rest/affiliate/link/generate"  # เปลี่ยนให้ตรงกับ API ใหม่
     params = {
         "app_key": LAZADA_APP_KEY,
         "timestamp": str(int(time.time() * 1000)),
@@ -76,6 +74,8 @@ def generate_lazada_affiliate_link(product_url):
     }
 
     params["sign"] = generate_signature(params)
+    debug_log(f"Affiliate Link Params: {params}")  # เพิ่ม Debug Log
+
     response = requests.get(endpoint, params=params).json()
     
     debug_log(f"Lazada Affiliate Response: {response}")
@@ -84,7 +84,6 @@ def generate_lazada_affiliate_link(product_url):
         return response["data"]["aff_link"]
 
     return None
-
 
 # ✅ ฟังก์ชันส่งข้อความกลับไปยัง LINE
 def send_line_message(reply_token, text):
@@ -99,7 +98,6 @@ def send_line_message(reply_token, text):
 
     response = requests.post(LINE_REPLY_URL, headers=headers, json=payload)
     debug_log(f"LINE API Response: {response.json()}")
-
 
 # ✅ Webhook API ที่รับคำค้นหาและสร้างลิงก์ Lazada
 @app.route("/webhook", methods=["POST"])
@@ -146,10 +144,8 @@ def webhook():
         debug_log(f"❌ Error: {str(e)}")
         return jsonify({"error": f"❌ Internal Server Error: {str(e)}"}), 500
 
-
 # ✅ ให้ Flask ใช้พอร์ตที่ถูกต้อง
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     debug_log(f"✅ Starting Flask on port {port}...")
     app.run(host="0.0.0.0", port=port)
-
