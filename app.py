@@ -4,7 +4,7 @@ import requests
 
 app = Flask(__name__)
 
-# ✅ โหลด LINE Access Token จาก Environment Variable
+# ✅ โหลด LINE Access Token
 LINE_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 
 # ✅ ฟังก์ชันส่งข้อความกลับไปที่ LINE
@@ -28,12 +28,17 @@ def webhook():
         data = request.get_json()
         print(f"🛠 DEBUG: Received Data: {data}")  # Debug log
 
-        if not data or "events" not in data:
-            return jsonify({"error": "❌ ไม่มีข้อมูลที่ส่งมา"}), 400
+        # ✅ เช็คว่ามี events หรือไม่
+        if not data or "events" not in data or len(data["events"]) == 0:
+            print("⚠️ ไม่มี events ใน request")
+            return jsonify({"error": "❌ ไม่มี events ใน request"}), 400
 
-        event = data["events"][0]
+        event = data["events"][0]  # ✅ ดึง Event แรก (ถ้ามี)
+
+        # ✅ เช็คว่าเป็นข้อความหรือไม่
         if "message" not in event or "text" not in event["message"]:
-            return jsonify({"error": "❌ ข้อความไม่ถูกต้อง"}), 400
+            print("⚠️ ไม่ใช่ข้อความที่สามารถอ่านได้")
+            return jsonify({"error": "❌ ไม่ใช่ข้อความที่สามารถอ่านได้"}), 400
 
         text = event["message"]["text"]
         reply_token = event["replyToken"]
