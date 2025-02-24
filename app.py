@@ -4,16 +4,14 @@ import hmac
 import hashlib
 import requests
 import urllib.parse
-import json
 from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-# ✅ โหลด API Keys จาก Environment Variables
-LAZADA_APP_KEY = os.getenv("LAZADA_APP_KEY", "132211")
-LAZADA_APP_SECRET = os.getenv("LAZADA_APP_SECRET", "Xgs5j7N6SNvuVdHo9d6ybwd3LhVvaHVY")
-LAZADA_ACCESS_TOKEN = os.getenv("LAZADA_ACCESS_TOKEN")  # Access Token ต้องอัปเดตทุก 30 นาที - 1 ชั่วโมง
-LAZADA_REFRESH_TOKEN = os.getenv("LAZADA_REFRESH_TOKEN")  # ใช้ขอ Access Token ใหม่เมื่อหมดอายุ
+# ✅ โหลด API Keys
+LAZADA_APP_KEY = os.getenv("LAZADA_APP_KEY")
+LAZADA_APP_SECRET = os.getenv("LAZADA_APP_SECRET")
+LAZADA_USER_TOKEN = os.getenv("LAZADA_USER_TOKEN")
 LAZADA_AFFILIATE_ID = os.getenv("LAZADA_AFFILIATE_ID")
 
 # ✅ ฟังก์ชัน Debug Log
@@ -29,50 +27,24 @@ def generate_signature(params):
     ).hexdigest().upper()
     return signature
 
-# ✅ ฟังก์ชันรีเฟรช Access Token อัตโนมัติ
-def refresh_access_token():
-    global LAZADA_ACCESS_TOKEN, LAZADA_REFRESH_TOKEN
-    endpoint = "https://auth.lazada.com/rest/token"
-    params = {
-        "app_key": LAZADA_APP_KEY,
-        "timestamp": str(int(time.time() * 1000)),
-        "sign_method": "sha256",
-        "grant_type": "refresh_token",
-        "refresh_token": LAZADA_REFRESH_TOKEN
-    }
-    params["sign"] = generate_signature(params)
-
-    response = requests.post(endpoint, data=params).json()
-    debug_log(f"Lazada Token Refresh Response: {response}")
-
-    if "access_token" in response:
-        LAZADA_ACCESS_TOKEN = response["access_token"]
-        LAZADA_REFRESH_TOKEN = response["refresh_token"]
-        return True
-    return False
-
-# ✅ ฟังก์ชันค้นหาสินค้าขายดีบน Lazada
+# ✅ ฟังก์ชันค้นหาสินค้าที่ขายดีที่สุดใน Lazada
 def get_best_selling_lazada(keyword):
-    endpoint = "https://api.lazada.co.th/rest/products/search"
+    endpoint = "https://api.lazada.co.th/rest/product/search"  # ✅ ตรวจสอบ API Path
     params = {
         "app_key": LAZADA_APP_KEY,
         "timestamp": str(int(time.time() * 1000)),
         "sign_method": "sha256",
-        "access_token": LAZADA_ACCESS_TOKEN,
+        "access_token": LAZADA_USER_TOKEN,
         "format": "JSON",
         "v": "1.0",
-        "q": keyword,
-        "sort_by": "sales_volume"
+        "q": keyword,  # ✅ คำค้นหา
+        "sortType": "sales"  # ✅ เรียงลำดับตามยอดขายสูงสุด
     }
+
     params["sign"] = generate_signature(params)
+    response = requests.get(endpoint, params=params).json()  # ✅ ต้องใช้ GET
 
-    response = requests.get(endpoint, params=params).json()
     debug_log(f"Lazada Search Response: {response}")
-
-    if "code" in response and response["code"] == "AccessTokenExpired":
-        if refresh_access_token():
-            return get_best_selling_lazada(keyword)  # 🔁 ลองใหม่หลังจากรีเฟรช Token
-        return None, None
 
     if "data" in response and "products" in response["data"]:
         best_product = sorted(response["data"]["products"], key=lambda x: x["sales"], reverse=True)[0]
@@ -84,26 +56,22 @@ def get_best_selling_lazada(keyword):
 
 # ✅ ฟังก์ชันสร้างลิงก์ Affiliate สำหรับ Lazada
 def generate_lazada_affiliate_link(product_url):
-    endpoint = "https://api.lazada.co.th/rest/affiliate/link/generate"
+    endpoint = "https://api.lazada.co.th/rest/marketing/getlink"
     params = {
         "app_key": LAZADA_APP_KEY,
         "timestamp": str(int(time.time() * 1000)),
         "sign_method": "sha256",
-        "access_token": LAZADA_ACCESS_TOKEN,
+        "access_token": LAZADA_USER_TOKEN,
         "format": "JSON",
         "v": "1.0",
         "tracking_id": LAZADA_AFFILIATE_ID,
         "url": product_url
     }
+
     params["sign"] = generate_signature(params)
-
     response = requests.get(endpoint, params=params).json()
-    debug_log(f"Lazada Affiliate Response: {response}")
 
-    if "code" in response and response["code"] == "AccessTokenExpired":
-        if refresh_access_token():
-            return generate_lazada_affiliate_link(product_url)  # 🔁 ลองใหม่หลังจากรีเฟรช Token
-        return None
+    debug_log(f"Lazada Affiliate Response: {response}")
 
     if "data" in response and "aff_link" in response["data"]:
         return response["data"]["aff_link"]
@@ -120,7 +88,7 @@ def webhook():
         if not data:
             return jsonify({"error": "❌ ไม่มีข้อมูลที่ส่งมา"}), 400
 
-        keyword = data.get("keyword", "default_keyword")
+        keyword = data.get("keyword", "").strip()
 
         if not keyword:
             return jsonify({"error": "❌ กรุณาระบุคำค้นหา"}), 400
