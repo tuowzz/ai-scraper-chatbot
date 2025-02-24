@@ -4,14 +4,16 @@ import hmac
 import hashlib
 import requests
 import urllib.parse
+import json
 from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-# ✅ โหลด API Keys
-LAZADA_APP_KEY = os.getenv("LAZADA_APP_KEY")
-LAZADA_APP_SECRET = os.getenv("LAZADA_APP_SECRET")
-LAZADA_USER_TOKEN = os.getenv("LAZADA_USER_TOKEN")
+# ✅ โหลด API Keys จาก Environment Variables
+LAZADA_APP_KEY = os.getenv("LAZADA_APP_KEY", "132211")
+LAZADA_APP_SECRET = os.getenv("LAZADA_APP_SECRET", "Xgs5j7N6SNvuVdHo9d6ybwd3LhVvaHVY")
+LAZADA_ACCESS_TOKEN = os.getenv("LAZADA_ACCESS_TOKEN")  # Access Token ต้องอัปเดตทุก 30 นาที - 1 ชั่วโมง
+LAZADA_REFRESH_TOKEN = os.getenv("LAZADA_REFRESH_TOKEN")  # ใช้ขอ Access Token ใหม่เมื่อหมดอายุ
 LAZADA_AFFILIATE_ID = os.getenv("LAZADA_AFFILIATE_ID")
 
 # ✅ ฟังก์ชัน Debug Log
@@ -27,6 +29,28 @@ def generate_signature(params):
     ).hexdigest().upper()
     return signature
 
+# ✅ ฟังก์ชันรีเฟรช Access Token อัตโนมัติ
+def refresh_access_token():
+    global LAZADA_ACCESS_TOKEN, LAZADA_REFRESH_TOKEN
+    endpoint = "https://auth.lazada.com/rest/token"
+    params = {
+        "app_key": LAZADA_APP_KEY,
+        "timestamp": str(int(time.time() * 1000)),
+        "sign_method": "sha256",
+        "grant_type": "refresh_token",
+        "refresh_token": LAZADA_REFRESH_TOKEN
+    }
+    params["sign"] = generate_signature(params)
+
+    response = requests.post(endpoint, data=params).json()
+    debug_log(f"Lazada Token Refresh Response: {response}")
+
+    if "access_token" in response:
+        LAZADA_ACCESS_TOKEN = response["access_token"]
+        LAZADA_REFRESH_TOKEN = response["refresh_token"]
+        return True
+    return False
+
 # ✅ ฟังก์ชันค้นหาสินค้าขายดีบน Lazada
 def get_best_selling_lazada(keyword):
     endpoint = "https://api.lazada.co.th/rest/products/search"
@@ -34,17 +58,21 @@ def get_best_selling_lazada(keyword):
         "app_key": LAZADA_APP_KEY,
         "timestamp": str(int(time.time() * 1000)),
         "sign_method": "sha256",
-        "access_token": LAZADA_USER_TOKEN,
+        "access_token": LAZADA_ACCESS_TOKEN,
         "format": "JSON",
         "v": "1.0",
-        "q": keyword,  # ✅ ใช้คำค้นหาที่ส่งมา
-        "sort_by": "sales_volume"  # 🔥 เรียงลำดับตามยอดขายสูงสุด
+        "q": keyword,
+        "sort_by": "sales_volume"
     }
-
     params["sign"] = generate_signature(params)
+
     response = requests.get(endpoint, params=params).json()
-    
     debug_log(f"Lazada Search Response: {response}")
+
+    if "code" in response and response["code"] == "AccessTokenExpired":
+        if refresh_access_token():
+            return get_best_selling_lazada(keyword)  # 🔁 ลองใหม่หลังจากรีเฟรช Token
+        return None, None
 
     if "data" in response and "products" in response["data"]:
         best_product = sorted(response["data"]["products"], key=lambda x: x["sales"], reverse=True)[0]
@@ -61,17 +89,21 @@ def generate_lazada_affiliate_link(product_url):
         "app_key": LAZADA_APP_KEY,
         "timestamp": str(int(time.time() * 1000)),
         "sign_method": "sha256",
-        "access_token": LAZADA_USER_TOKEN,
+        "access_token": LAZADA_ACCESS_TOKEN,
         "format": "JSON",
         "v": "1.0",
         "tracking_id": LAZADA_AFFILIATE_ID,
         "url": product_url
     }
-
     params["sign"] = generate_signature(params)
+
     response = requests.get(endpoint, params=params).json()
-    
     debug_log(f"Lazada Affiliate Response: {response}")
+
+    if "code" in response and response["code"] == "AccessTokenExpired":
+        if refresh_access_token():
+            return generate_lazada_affiliate_link(product_url)  # 🔁 ลองใหม่หลังจากรีเฟรช Token
+        return None
 
     if "data" in response and "aff_link" in response["data"]:
         return response["data"]["aff_link"]
