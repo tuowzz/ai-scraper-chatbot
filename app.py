@@ -30,60 +30,66 @@ def generate_signature(params):
     ).hexdigest().upper()
     return signature
 
-# ✅ ฟังก์ชันค้นหาสินค้าขายดีบน Lazada (ใช้ API ใหม่)
+# ✅ ฟังก์ชันค้นหาสินค้าขายดีบน Lazada
 def get_best_selling_lazada(keyword):
-    endpoint = "https://api.lazada.co.th/rest/product/item/get"  # เปลี่ยน API ใหม่
-    params = {
-        "app_key": LAZADA_APP_KEY,
-        "timestamp": str(int(time.time() * 1000)),
-        "sign_method": "sha256",
-        "access_token": LAZADA_USER_TOKEN,
-        "format": "JSON",
-        "v": "1.0",
-        "item_id": keyword  # ✅ ค้นหาสินค้าตาม Keyword
-    }
+    try:
+        endpoint = "https://api.lazada.co.th/rest/product/item/get"  # เปลี่ยน API ใหม่
+        params = {
+            "app_key": LAZADA_APP_KEY,
+            "timestamp": str(int(time.time() * 1000)),
+            "sign_method": "sha256",
+            "access_token": LAZADA_USER_TOKEN,
+            "format": "JSON",
+            "v": "1.0",
+            "item_id": keyword  # ✅ ใช้ Keyword แทน Item ID
+        }
 
-    params["sign"] = generate_signature(params)
-    debug_log(f"Request Params: {params}")  # เพิ่ม Debug Log
+        params["sign"] = generate_signature(params)
+        debug_log(f"Request Params: {params}")
 
-    response = requests.get(endpoint, params=params).json()
-    
-    debug_log(f"Lazada Search Response: {response}")
+        response = requests.get(endpoint, params=params).json()
+        debug_log(f"Lazada Search Response: {response}")
 
-    if "data" in response and "item" in response["data"]:
-        product_url = response["data"]["item"]["url"]
-        product_name = response["data"]["item"]["name"]
-        return product_url, product_name
+        if "data" in response and "item" in response["data"]:
+            product_url = response["data"]["item"]["url"]
+            product_name = response["data"]["item"]["name"]
+            return product_url, product_name
+
+    except Exception as e:
+        debug_log(f"❌ Error in get_best_selling_lazada: {str(e)}")
 
     return None, None
 
 # ✅ ฟังก์ชันสร้างลิงก์ Affiliate สำหรับ Lazada
 def generate_lazada_affiliate_link(product_url):
-    endpoint = "https://api.lazada.co.th/rest/affiliate/link/generate"  # เปลี่ยน API ใหม่
-    params = {
-        "app_key": LAZADA_APP_KEY,
-        "timestamp": str(int(time.time() * 1000)),
-        "sign_method": "sha256",
-        "access_token": LAZADA_USER_TOKEN,
-        "format": "JSON",
-        "v": "1.0",
-        "tracking_id": LAZADA_AFFILIATE_ID,
-        "url": product_url
-    }
+    try:
+        endpoint = "https://api.lazada.co.th/rest/affiliate/link/generate"
+        params = {
+            "app_key": LAZADA_APP_KEY,
+            "timestamp": str(int(time.time() * 1000)),
+            "sign_method": "sha256",
+            "access_token": LAZADA_USER_TOKEN,
+            "format": "JSON",
+            "v": "1.0",
+            "tracking_id": LAZADA_AFFILIATE_ID,
+            "url": product_url
+        }
 
-    params["sign"] = generate_signature(params)
-    debug_log(f"Affiliate Link Params: {params}")  # เพิ่ม Debug Log
+        params["sign"] = generate_signature(params)
+        debug_log(f"Affiliate Link Params: {params}")
 
-    response = requests.get(endpoint, params=params).json()
-    
-    debug_log(f"Lazada Affiliate Response: {response}")
+        response = requests.get(endpoint, params=params).json()
+        debug_log(f"Lazada Affiliate Response: {response}")
 
-    if "data" in response and "aff_link" in response["data"]:
-        return response["data"]["aff_link"]
+        if "data" in response and "aff_link" in response["data"]:
+            return response["data"]["aff_link"]
+
+    except Exception as e:
+        debug_log(f"❌ Error in generate_lazada_affiliate_link: {str(e)}")
 
     return None
 
-# ✅ ฟังก์ชันส่งข้อความกลับไปยัง LINE (แก้ไข Reply Token)
+# ✅ ฟังก์ชันส่งข้อความกลับไปยัง LINE
 def send_line_message(reply_token, text):
     if not reply_token:
         debug_log("❌ Reply Token ไม่ถูกต้อง")
@@ -98,8 +104,11 @@ def send_line_message(reply_token, text):
         "messages": [{"type": "text", "text": text}]
     }
 
-    response = requests.post(LINE_REPLY_URL, headers=headers, json=payload)
-    debug_log(f"LINE API Response: {response.json()}")
+    try:
+        response = requests.post(LINE_REPLY_URL, headers=headers, json=payload)
+        debug_log(f"LINE API Response: {response.json()}")
+    except Exception as e:
+        debug_log(f"❌ Error in send_line_message: {str(e)}")
 
 # ✅ Webhook API ที่รับคำค้นหาและสร้างลิงก์ Lazada
 @app.route("/webhook", methods=["POST"])
@@ -121,18 +130,21 @@ def webhook():
         if not keyword:
             return jsonify({"error": "❌ กรุณาระบุคำค้นหา"}), 400
 
+        # ✅ ค้นหาสินค้าขายดี
         product_url, product_name = get_best_selling_lazada(keyword)
 
         if not product_url:
             send_line_message(reply_token, f"❌ ไม่พบสินค้าสำหรับ: {keyword}")
             return jsonify({"error": "❌ ไม่พบสินค้าที่ตรงกับคำค้นหา"}), 404
 
+        # ✅ สร้างลิงก์ Affiliate
         lazada_link = generate_lazada_affiliate_link(product_url)
 
         if not lazada_link:
             send_line_message(reply_token, "❌ ไม่สามารถสร้างลิงก์ Affiliate ได้")
             return jsonify({"error": "❌ ไม่สามารถสร้างลิงก์ Affiliate ได้"}), 500
 
+        # ✅ ส่งข้อความกลับไปยัง LINE
         response_text = (
             f"🔎 ค้นหาสินค้าเกี่ยวกับ: {keyword}\n\n"
             f"🛍 Lazada: {lazada_link}\n\n"
@@ -140,7 +152,7 @@ def webhook():
         )
 
         send_line_message(reply_token, response_text)
-        return jsonify({"status": "✅ สำเร็จ"})
+        return jsonify({"status": "✅ สำเร็จ"}), 200  # ✅ ตอบกลับ HTTP 200
 
     except Exception as e:
         debug_log(f"❌ Error: {str(e)}")
