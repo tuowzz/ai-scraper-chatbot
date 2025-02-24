@@ -30,9 +30,9 @@ def generate_signature(params):
     ).hexdigest().upper()
     return signature
 
-# ✅ ฟังก์ชันค้นหาสินค้าขายดีบน Lazada
+# ✅ ฟังก์ชันค้นหาสินค้าขายดีบน Lazada (ใช้ API ใหม่)
 def get_best_selling_lazada(keyword):
-    endpoint = "https://api.lazada.co.th/rest/products/search"  # เปลี่ยนให้ตรงกับ API ใหม่
+    endpoint = "https://api.lazada.co.th/rest/product/item/get"  # เปลี่ยน API ใหม่
     params = {
         "app_key": LAZADA_APP_KEY,
         "timestamp": str(int(time.time() * 1000)),
@@ -40,8 +40,7 @@ def get_best_selling_lazada(keyword):
         "access_token": LAZADA_USER_TOKEN,
         "format": "JSON",
         "v": "1.0",
-        "q": keyword,  # ✅ ใช้คำค้นหาที่ส่งมา
-        "sort_by": "sales_volume"  # 🔥 เรียงลำดับตามยอดขายสูงสุด
+        "item_id": keyword  # ✅ ค้นหาสินค้าตาม Keyword
     }
 
     params["sign"] = generate_signature(params)
@@ -51,17 +50,16 @@ def get_best_selling_lazada(keyword):
     
     debug_log(f"Lazada Search Response: {response}")
 
-    if "data" in response and "products" in response["data"]:
-        best_product = sorted(response["data"]["products"], key=lambda x: x["sales"], reverse=True)[0]
-        product_url = best_product["url"]
-        product_name = best_product["name"]
+    if "data" in response and "item" in response["data"]:
+        product_url = response["data"]["item"]["url"]
+        product_name = response["data"]["item"]["name"]
         return product_url, product_name
 
     return None, None
 
 # ✅ ฟังก์ชันสร้างลิงก์ Affiliate สำหรับ Lazada
 def generate_lazada_affiliate_link(product_url):
-    endpoint = "https://api.lazada.co.th/rest/affiliate/link/generate"  # เปลี่ยนให้ตรงกับ API ใหม่
+    endpoint = "https://api.lazada.co.th/rest/affiliate/link/generate"  # เปลี่ยน API ใหม่
     params = {
         "app_key": LAZADA_APP_KEY,
         "timestamp": str(int(time.time() * 1000)),
@@ -85,8 +83,12 @@ def generate_lazada_affiliate_link(product_url):
 
     return None
 
-# ✅ ฟังก์ชันส่งข้อความกลับไปยัง LINE
+# ✅ ฟังก์ชันส่งข้อความกลับไปยัง LINE (แก้ไข Reply Token)
 def send_line_message(reply_token, text):
+    if not reply_token:
+        debug_log("❌ Reply Token ไม่ถูกต้อง")
+        return
+
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {LINE_ACCESS_TOKEN}"
